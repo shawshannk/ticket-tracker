@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+.turbo/
+apps/**/dist/
+packages/**/dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+apps/api/.env
+
+# Database
+*.sqlite
+
+# Testing
+coverage/
+playwright-report/
+test-results/
+.playwright/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+
+# Drizzle
+drizzle/meta/_journal.json.bak

@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#4f46e5;text-decoration:none}
+a:hover{color:#4338ca}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:5px}
+::-webkit-scrollbar-track{background:transparent}
+select{font-family:inherit}
+textarea,input{font-family:inherit}
+</style>
+</helmet>
+
+<div style="display:flex;height:100vh;width:100vw;background:#f3f4f6;color:#0f172a;overflow:hidden" data-screen-label="Ticket Dashboard">
+
+  <!-- SIDEBAR -->
+  <div style="width:216px;flex:none;background:#12141c;color:#e2e4ea;display:flex;flex-direction:column;padding:20px 14px;gap:4px">
+    <div style="padding:6px 8px 18px 8px;position:relative">
+      <div style="font-size:10.5px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:#6b7280;margin-bottom:8px;padding-left:2px">{{ companyName }}</div>
+      <div onClick="{{ toggleProjectMenu }}" style="display:flex;align-items:center;gap:9px;cursor:pointer;padding:4px;border-radius:8px" style-hover="background:rgba(255,255,255,.06)">
+        <div style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#6366f1,#4338ca);flex:none;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#fff">{{ projectInitial }}</div>
+        <div style="font-weight:600;font-size:15px;letter-spacing:.2px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ project }}</div>
+        <span style="font-size:10px;color:#6b7280;flex:none">▾</span>
+      </div>
+      <sc-if value="{{ projectMenuOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;top:100%;left:4px;right:4px;margin-top:4px;background:#1c1f2a;border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:5px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.35)">
+          <sc-for list="{{ projectOptions }}" as="po" hint-placeholder-count="3">
+            <div onClick="{{ po.onClick }}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px;color:#e2e4ea" style-hover="background:rgba(255,255,255,.08)">
+              <span>{{ po.name }}</span>
+              <sc-if value="{{ po.isActive }}" hint-placeholder-val="{{ false }}"><span style="color:#818cf8;font-size:12px">✓</span></sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+
+    <div onClick="{{ goOverview }}" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13.5px;font-weight:500" style-hover="background:rgba(255,255,255,.06)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;opacity:.85;color:{{ navOverviewColor }}">
+        <rect x="3" y="3" width="7" height="9" rx="1.5"></rect>
+        <rect x="14" y="3" width="7" height="5" rx="1.5"></rect>
+        <rect x="14" y="12" width="7" height="9" rx="1.5"></rect>
+        <rect x="3" y="16" width="7" height="5" rx="1.5"></rect>
+      </svg>
+      <span style="color:{{ navOverviewColor }}">Overview</span>
+    </div>
+
+    <div onClick="{{ goList }}" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13.5px;font-weight:500;justify-content:space-between" style-hover="background:rgba(255,255,255,.06)">
+      <div style="display:flex;align-items:center;gap:10px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;opacity:.85;color:{{ navListColor }}">
+          <path d="M9 6h11"></path>
+          <path d="M9 12h11"></path>
+          <path d="M9 18h11"></path>
+          <path d="M4 6h.01"></path>
+          <path d="M4 12h.01"></path>
+          <path d="M4 18h.01"></path>
+        </svg>
+        <span style="color:{{ navListColor }}">Tickets</span>
+      </div>
+      <span style="font-size:11px;font-family:'IBM Plex Mono',monospace;background:rgba(255,255,255,.08);color:#a5adc6;padding:1px 6px;border-radius:9px">{{ openCount }}</span>
+    </div>
+
+    <div onClick="{{ goBoard }}" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13.5px;font-weight:500" style-hover="background:rgba(255,255,255,.06)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;opacity:.85;color:{{ navBoardColor }}">
+        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+        <path d="M9 3v18"></path>
+        <path d="M15 3v18"></path>
+      </svg>
+      <span style="color:{{ navBoardColor }}">Board</span>
+    </div>
+
+    <div onClick="{{ goPeople }}" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13.5px;font-weight:500" style-hover="background:rgba(255,255,255,.06)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;opacity:.85;color:{{ navPeopleColor }}">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+        <circle cx="9" cy="7" r="4"></circle>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+      </svg>
+      <span style="color:{{ navPeopleColor }}">People</span>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <div onClick="{{ goCreate }}" style="display:flex;align-items:center;justify-content:center;gap:7px;padding:10px 12px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;background:#4f46e5;color:#fff;margin-top:8px" style-hover="background:#4338ca">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex:none">
+        <path d="M12 5v14"></path>
+        <path d="M5 12h14"></path>
+      </svg>
+      New Ticket
+    </div>
+
+    <div style="position:relative;margin-top:10px;border-top:1px solid rgba(255,255,255,.08);padding-top:10px">
+      <div onClick="{{ toggleUserMenu }}" style="display:flex;align-items:center;gap:9px;padding:4px 4px 4px 4px;border-radius:8px;cursor:pointer" style-hover="background:rgba(255,255,255,.06)">
+        <div style="width:26px;height:26px;border-radius:50%;background:#374151;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#e2e4ea;flex:none">{{ currentUserInitials }}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;color:#e2e4ea;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ currentUser.name }}</div>
+          <span style="font-size:9.5px;font-weight:600;padding:0px 6px;border-radius:8px;background:{{ roleBg }};color:{{ roleColor }}">{{ role }}</span>
+        </div>
+        <span style="font-size:10px;color:#6b7280;flex:none">▾</span>
+      </div>
+      <sc-if value="{{ userMenuOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;bottom:100%;left:4px;right:4px;margin-bottom:4px;background:#1c1f2a;border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:5px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.35)">
+          <div style="font-size:10px;color:#6b7280;padding:6px 8px 4px;text-transform:uppercase;letter-spacing:.4px">Switch user (demo)</div>
+          <sc-for list="{{ userSwitchOptions }}" as="uo" hint-placeholder-count="6">
+            <div onClick="{{ uo.onClick }}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px;color:#e2e4ea" style-hover="background:rgba(255,255,255,.08)">
+              <span>{{ uo.name }}</span>
+              <span style="display:flex;align-items:center;gap:6px">
+                <span style="font-size:10px;color:#6b7280">{{ uo.role }}</span>
+                <sc-if value="{{ uo.isActive }}" hint-placeholder-val="{{ false }}"><span style="color:#818cf8;font-size:12px">✓</span></sc-if>
+              </span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div style="flex:1;display:flex;flex-direction:column;min-width:0;height:100vh">
+
+    <!-- TOPBAR -->
+    <div style="height:60px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 28px;border-bottom:1px solid #e5e7eb;background:#fff">
+      <div style="display:flex;align-items:baseline;gap:10px;min-width:0">
+        <sc-if value="{{ showBack }}">
+          <span onClick="{{ backHandler }}" style="cursor:pointer;color:#6b7280;font-size:13px;font-weight:500;display:flex;align-items:center;gap:5px" style-hover="color:#111827">{{ backLabel }}</span>
+          <span style="color:#d1d5db">/</span>
+        </sc-if>
+        <div style="font-size:17px;font-weight:600;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ viewTitle }}</div>
+      </div>
+      <sc-if value="{{ isList }}">
+        <input placeholder="Search tickets, keys, people…" value="{{ filters.search }}" onChange="{{ onSearchChange }}" style="width:260px;padding:8px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;background:#f9fafb;outline:none" />
+      </sc-if>
+    </div>
+
+    <!-- CONTENT SCROLL AREA -->
+    <div style="flex:1;overflow-y:auto;min-height:0">
+
+      <!-- OVERVIEW -->
+      <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:28px 32px 60px;max-width:1180px">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px">
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px 20px">
+              <div style="font-size:12.5px;color:#6b7280;font-weight:500;margin-bottom:8px">Open tickets</div>
+              <div style="font-size:28px;font-weight:700;letter-spacing:-.5px">{{ openCount }}</div>
+            </div>
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px 20px">
+              <div style="font-size:12.5px;color:#6b7280;font-weight:500;margin-bottom:8px">Critical &amp; open</div>
+              <div style="font-size:28px;font-weight:700;letter-spacing:-.5px;color:#b91c1c">{{ criticalOpen }}</div>
+            </div>
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px 20px">
+              <div style="font-size:12.5px;color:#6b7280;font-weight:500;margin-bottom:8px">Avg. resolution</div>
+              <div style="font-size:28px;font-weight:700;letter-spacing:-.5px">{{ avgResolutionDays }}<span style="font-size:15px;font-weight:500;color:#6b7280"> days</span></div>
+            </div>
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px 20px">
+              <div style="font-size:12.5px;color:#6b7280;font-weight:500;margin-bottom:8px">Created this week</div>
+              <div style="font-size:28px;font-weight:700;letter-spacing:-.5px">{{ createdThisWeek }}</div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px">
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:22px">
+              <div style="font-size:14px;font-weight:600;margin-bottom:16px">Tickets by status</div>
+              <sc-for list="{{ statusBreakdown }}" as="s" hint-placeholder-count="6">
+                <div style="margin-bottom:14px">
+                  <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;gap:8px">
+                    <span style="font-weight:500;color:#374151;white-space:nowrap">{{ s.name }}</span>
+                    <span style="color:#6b7280;font-family:'IBM Plex Mono',monospace">{{ s.count }}</span>
+                  </div>
+                  <div style="height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden">
+                    <div style="height:100%;border-radius:4px;width:{{ s.pct }}%;background:{{ s.color }}"></div>
+                  </div>
+                </div>
+              </sc-for>
+
+              <div style="font-size:14px;font-weight:600;margin:22px 0 16px">Tickets by priority</div>
+              <div style="display:flex;gap:10px">
+                <sc-for list="{{ priorityBreakdown }}" as="p" hint-placeholder-count="4">
+                  <div style="flex:1;background:{{ p.bg }};border-radius:9px;padding:12px 10px;text-align:center">
+                    <div style="font-size:20px;font-weight:700;color:{{ p.fg }}">{{ p.count }}</div>
+                    <div style="font-size:11.5px;color:{{ p.fg }};font-weight:500;margin-top:2px;white-space:nowrap">{{ p.name }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:22px">
+              <div style="font-size:14px;font-weight:600;margin-bottom:14px">Recently updated</div>
+              <sc-for list="{{ recentActivity }}" as="t" hint-placeholder-count="5">
+                <div onClick="{{ t.onClick }}" style="display:flex;flex-direction:column;gap:4px;padding:10px 8px;border-radius:8px;cursor:pointer;border-bottom:1px solid #f1f5f9" style-hover="background:#f9fafb">
+                  <div style="display:flex;justify-content:space-between;gap:8px">
+                    <span style="font-size:11px;font-family:'IBM Plex Mono',monospace;color:#818cf8;font-weight:600;white-space:nowrap">{{ t.key }}</span>
+                    <span style="font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:9px;background:{{ t.statusBg }};color:{{ t.statusColor }};white-space:nowrap;flex:none">{{ t.status }}</span>
+                  </div>
+                  <sc-if value="{{ t.showBreadcrumb }}" hint-placeholder-val="{{ true }}">
+                    <div style="font-size:10.5px;color:#c1c7d0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.breadcrumb }}</div>
+                  </sc-if>
+                  <div style="font-size:13px;font-weight:500;color:#1f2937;line-height:1.3">{{ t.title }}</div>
+                  <div style="font-size:11.5px;color:#9ca3af">{{ t.updatedDisplay }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- LIST -->
+      <sc-if value="{{ isList }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:22px 32px 60px">
+          <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap">
+            <select value="{{ filters.status }}" onChange="{{ onStatusFilterChange }}" style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;background:#fff">
+              <sc-for list="{{ statusFilterOptions }}" as="o" hint-placeholder-count="7"><option value="{{ o }}">{{ o }}</option></sc-for>
+            </select>
+            <select value="{{ filters.priority }}" onChange="{{ onPriorityFilterChange }}" style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;background:#fff">
+              <sc-for list="{{ priorityFilterOptions }}" as="o" hint-placeholder-count="5"><option value="{{ o }}">{{ o }}</option></sc-for>
+            </select>
+            <select value="{{ filters.assignee }}" onChange="{{ onAssigneeFilterChange }}" style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;background:#fff">
+              <sc-for list="{{ assigneeFilterOptions }}" as="o" hint-placeholder-count="5"><option value="{{ o }}">{{ o }}</option></sc-for>
+            </select>
+            <select value="{{ filters.env }}" onChange="{{ onEnvFilterChange }}" style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;background:#fff">
+              <sc-for list="{{ envFilterOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o }}">{{ o }}</option></sc-for>
+            </select>
+            <select value="{{ filters.epic }}" onChange="{{ onEpicFilterChange }}" style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;background:#fff">
+              <sc-for list="{{ epicFilterOptions }}" as="o" hint-placeholder-count="6"><option value="{{ o }}">{{ o }}</option></sc-for>
+            </select>
+            <select value="{{ filters.type }}" onChange="{{ onTypeFilterChange }}" style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;background:#fff">
+              <sc-for list="{{ typeFilterOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o }}">{{ o }}</option></sc-for>
+            </select>
+            <div style="flex:1"></div>
+            <div style="font-size:12.5px;color:#9ca3af;align-self:center;white-space:nowrap">{{ resultCountLabel }}</div>
+          </div>
+
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow-x:auto">
+            <div style="min-width:820px">
+              <div style="display:grid;grid-template-columns:44px 74px minmax(0,1fr) 82px 96px 88px 100px 70px;padding:10px 18px;border-bottom:1px solid #e5e7eb;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;gap:6px">
+                <div>Type</div><div>Key</div><div>Title</div><div>Env</div><div>Status</div><div>Priority</div><div>Assignee</div><div>Created</div>
+              </div>
+              <sc-for list="{{ filteredTickets }}" as="t" hint-placeholder-count="8">
+                <div onClick="{{ t.onClick }}" style="display:grid;grid-template-columns:44px 74px minmax(0,1fr) 82px 96px 88px 100px 70px;padding:{{ rowPadding }};border-bottom:1px solid #f1f5f9;cursor:pointer;align-items:center;gap:6px" style-hover="background:#f9fafb">
+                  <div><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:{{ t.typeBg }};color:{{ t.typeColor }};white-space:nowrap">{{ t.type }}</span></div>
+                  <div style="font-size:11.5px;font-family:'IBM Plex Mono',monospace;color:#6366f1;font-weight:600;white-space:nowrap">{{ t.key }}</div>
+                  <div style="min-width:0">
+                    <sc-if value="{{ t.showBreadcrumb }}" hint-placeholder-val="{{ true }}">
+                      <div style="font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.breadcrumb }}</div>
+                    </sc-if>
+                    <div style="font-size:13.5px;font-weight:500;color:#1f2937;padding-right:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.title }}</div>
+                  </div>
+                  <div>
+                    <sc-if value="{{ t.isBug }}" hint-placeholder-val="{{ true }}">
+                      <span style="font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:6px;background:{{ t.envBg }};color:{{ t.envColor }};white-space:nowrap">{{ t.env }}</span>
+                    </sc-if>
+                  </div>
+                  <div><span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:9px;background:{{ t.statusBg }};color:{{ t.statusColor }};white-space:nowrap">{{ t.status }}</span></div>
+                  <div><span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:9px;background:{{ t.priorityBg }};color:{{ t.priorityColor }};white-space:nowrap">{{ t.priority }}</span></div>
+                  <div style="font-size:12.5px;color:#4b5563;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.assignee }}</div>
+                  <div style="font-size:12px;color:#9ca3af;white-space:nowrap">{{ t.createdDisplay }}</div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:40px;text-align:center;color:#9ca3af;font-size:13.5px">No tickets match your filters.</div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- BOARD -->
+      <sc-if value="{{ isBoard }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:22px 32px 60px;height:100%;overflow-x:auto">
+          <div style="display:flex;align-items:center;gap:18px;margin-bottom:16px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:12.5px;font-weight:500;color:#6b7280">Type</span>
+              <select value="{{ boardType }}" onChange="{{ onBoardTypeChange }}" style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;background:#fff">
+                <sc-for list="{{ typeFilterOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o }}">{{ o }}</option></sc-for>
+              </select>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:12.5px;font-weight:500;color:#6b7280">Sprint</span>
+              <select value="{{ boardSprint }}" onChange="{{ onBoardSprintChange }}" style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;background:#fff">
+                <sc-for list="{{ sprintFilterOptions }}" as="o" hint-placeholder-count="5"><option value="{{ o }}">{{ o }}</option></sc-for>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex;gap:14px;height:100%;align-items:flex-start;min-width:1080px">
+            <sc-for list="{{ boardColumns }}" as="col" hint-placeholder-count="6">
+              <div onDragOver="{{ allowDrop }}" onDrop="{{ col.onDrop }}" style="flex:1;min-width:170px;background:#eef0f3;border-radius:12px;padding:12px;min-height:200px">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 6px 12px;gap:6px">
+                  <div style="font-size:12px;font-weight:600;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ col.name }}</div>
+                  <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;color:#9ca3af;background:#fff;padding:1px 7px;border-radius:8px;flex:none">{{ col.count }}</div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <sc-for list="{{ col.tickets }}" as="t" hint-placeholder-count="3">
+                    <div draggable="true" onDragStart="{{ t.onDragStart }}" onClick="{{ t.onClick }}" style="background:#fff;border:1px solid #e5e7eb;border-radius:9px;padding:{{ cardPadding }};cursor:grab;box-shadow:0 1px 2px rgba(0,0,0,.03)" style-hover="border-color:#c7d2fe">
+                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;gap:6px">
+                        <div style="display:flex;align-items:center;gap:5px;min-width:0">
+                          <span style="font-size:9.5px;font-weight:700;width:15px;height:15px;border-radius:4px;display:flex;align-items:center;justify-content:center;background:{{ t.typeBg }};color:{{ t.typeColor }};flex:none">{{ t.typeInitial }}</span>
+                          <span style="font-size:10.5px;font-family:'IBM Plex Mono',monospace;color:#818cf8;font-weight:600;white-space:nowrap">{{ t.key }}</span>
+                        </div>
+                        <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;background:{{ t.priorityBg }};color:{{ t.priorityColor }};white-space:nowrap">{{ t.priority }}</span>
+                      </div>
+                      <sc-if value="{{ t.showBreadcrumb }}" hint-placeholder-val="{{ true }}">
+                        <div style="font-size:10px;color:#9ca3af;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.breadcrumb }}</div>
+                      </sc-if>
+                      <div style="font-size:12.5px;font-weight:500;color:#1f2937;line-height:1.35;margin-bottom:9px">{{ t.title }}</div>
+                      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+                        <sc-if value="{{ t.isBug }}" hint-placeholder-val="{{ true }}">
+                          <span style="font-size:10.5px;font-weight:600;padding:1px 6px;border-radius:6px;background:{{ t.envBg }};color:{{ t.envColor }};white-space:nowrap">{{ t.env }}</span>
+                        </sc-if>
+                        <span style="font-size:11px;color:#9ca3af;white-space:nowrap">{{ t.assigneeInitials }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- DETAIL -->
+      <sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:26px 32px 60px;display:grid;grid-template-columns:1fr 300px;gap:22px;max-width:1180px">
+          <div style="min-width:0">
+            <sc-if value="{{ ticket.showBreadcrumb }}" hint-placeholder-val="{{ true }}">
+              <div style="font-size:12px;color:#9ca3af;margin-bottom:8px">{{ ticket.breadcrumb }}</div>
+            </sc-if>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:{{ ticket.typeBg }};color:{{ ticket.typeColor }};white-space:nowrap">{{ ticket.type }}</span>
+              <span style="font-size:12px;font-family:'IBM Plex Mono',monospace;color:#818cf8;font-weight:600">{{ ticket.key }}</span>
+              <sc-if value="{{ ticket.isBug }}" hint-placeholder-val="{{ true }}">
+                <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:9px;background:{{ ticket.severityBg }};color:{{ ticket.severityColor }};white-space:nowrap">Sev {{ ticket.severity }}</span>
+                <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:{{ ticket.envBg }};color:{{ ticket.envColor }};white-space:nowrap">{{ ticket.env }}</span>
+              </sc-if>
+            </div>
+            <div style="font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:16px;line-height:1.3">{{ ticket.title }}</div>
+
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px">
+              <sc-for list="{{ ticket.tags }}" as="lab" hint-placeholder-count="3">
+                <span style="font-size:11px;font-weight:500;padding:3px 9px;border-radius:6px;background:{{ lab.bg }};color:{{ lab.fg }};white-space:nowrap">{{ lab.name }}</span>
+              </sc-for>
+            </div>
+
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:18px">
+              <div style="font-size:11.5px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Description</div>
+              <div style="font-size:13.5px;color:#374151;line-height:1.65;white-space:pre-wrap">{{ ticket.description }}</div>
+            </div>
+
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px">
+              <div style="font-size:11.5px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">Activity ({{ ticket.commentCount }})</div>
+              <sc-for list="{{ ticket.comments }}" as="c" hint-placeholder-count="2">
+                <div style="display:flex;gap:10px;margin-bottom:16px">
+                  <div style="width:28px;height:28px;border-radius:50%;background:#e0e7ff;color:#4338ca;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">{{ c.initials }}</div>
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:3px">
+                      <span style="font-size:12.5px;font-weight:600;color:#1f2937">{{ c.author }}</span>
+                      <span style="font-size:11px;color:#9ca3af">{{ c.time }}</span>
+                    </div>
+                    <div style="font-size:13px;color:#374151;line-height:1.5">{{ c.text }}</div>
+                  </div>
+                </div>
+              </sc-for>
+              <div style="display:flex;gap:10px;margin-top:6px">
+                <div style="width:28px;height:28px;border-radius:50%;background:#374151;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">JL</div>
+                <div style="flex:1">
+                  <textarea placeholder="Add a comment…" value="{{ newComment }}" onChange="{{ onNewCommentChange }}" style="width:100%;min-height:56px;border:1px solid #e5e7eb;border-radius:8px;padding:9px 11px;font-size:13px;resize:vertical;outline:none"></textarea>
+                  <div onClick="{{ onAddComment }}" style="display:inline-block;margin-top:8px;padding:7px 14px;background:#4f46e5;color:#fff;font-size:12.5px;font-weight:600;border-radius:7px;cursor:pointer" style-hover="background:#4338ca">Comment</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px">
+              <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Status</div>
+              <select value="{{ ticket.status }}" onChange="{{ onDetailStatusChange }}" style="width:100%;padding:7px 9px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;margin-bottom:14px;background:#fff">
+                <sc-for list="{{ ticket.statusOptions }}" as="s" hint-placeholder-count="6"><option value="{{ s }}">{{ s }}</option></sc-for>
+              </select>
+              <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Priority</div>
+              <select value="{{ ticket.priority }}" onChange="{{ onDetailPriorityChange }}" style="width:100%;padding:7px 9px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;margin-bottom:14px;background:#fff">
+                <sc-for list="{{ priorities }}" as="p" hint-placeholder-count="4"><option value="{{ p }}">{{ p }}</option></sc-for>
+              </select>
+              <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Assignee</div>
+              <select value="{{ ticket.assignee }}" onChange="{{ onDetailAssigneeChange }}" style="width:100%;padding:7px 9px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;margin-bottom:14px;background:#fff">
+                <sc-for list="{{ assignees }}" as="a" hint-placeholder-count="8"><option value="{{ a }}">{{ a }}</option></sc-for>
+              </select>
+              <sc-if value="{{ ticket.isBug }}" hint-placeholder-val="{{ true }}">
+                <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Environment</div>
+                <select value="{{ ticket.env }}" onChange="{{ onDetailEnvChange }}" style="width:100%;padding:7px 9px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;background:#fff">
+                  <sc-for list="{{ envs }}" as="e" hint-placeholder-count="3"><option value="{{ e }}">{{ e }}</option></sc-for>
+                </select>
+              </sc-if>
+            </div>
+
+            <sc-if value="{{ ticket.isStoryOrBug }}" hint-placeholder-val="{{ true }}">
+              <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px">
+                <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Epic</div>
+                <select value="{{ ticket.epic }}" onChange="{{ onDetailEpicChange }}" style="width:100%;padding:7px 9px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;margin-bottom:14px;background:#fff">
+                  <sc-for list="{{ epics }}" as="ep" hint-placeholder-count="5"><option value="{{ ep }}">{{ ep }}</option></sc-for>
+                </select>
+                <sc-if value="{{ ticket.isBug }}" hint-placeholder-val="{{ true }}">
+                  <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Story</div>
+                  <select value="{{ ticket.storyIdStr }}" onChange="{{ onDetailStoryChange }}" style="width:100%;padding:7px 9px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;background:#fff">
+                    <sc-for list="{{ ticket.storyOptions }}" as="so" hint-placeholder-count="3"><option value="{{ so.value }}">{{ so.label }}</option></sc-for>
+                  </select>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px">
+              <sc-if value="{{ ticket.isStoryOrBug }}" hint-placeholder-val="{{ true }}">
+                <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Sprint</div>
+                <select value="{{ ticket.sprint }}" onChange="{{ onDetailSprintChange }}" style="width:100%;padding:7px 9px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;margin-bottom:14px;background:#fff">
+                  <sc-for list="{{ sprintOptions }}" as="sp" hint-placeholder-count="4"><option value="{{ sp }}">{{ sp }}</option></sc-for>
+                </select>
+                <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Size estimate</div>
+                <select value="{{ ticket.size }}" onChange="{{ onDetailSizeChange }}" style="width:100%;padding:7px 9px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;margin-bottom:14px;background:#fff">
+                  <sc-for list="{{ sizes }}" as="sz" hint-placeholder-count="5"><option value="{{ sz }}">{{ sz }}</option></sc-for>
+                </select>
+              </sc-if>
+              <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Start date</div>
+              <input type="date" value="{{ ticket.startDate }}" onChange="{{ onDetailStartDateChange }}" style="width:100%;padding:7px 9px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;margin-bottom:14px;background:#fff" />
+              <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Estimated end date</div>
+              <input type="date" value="{{ ticket.estimatedEndDate }}" onChange="{{ onDetailEndDateChange }}" style="width:100%;padding:7px 9px;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;background:#fff;margin-bottom:16px" />
+              <div onClick="{{ onSaveDetail }}" style="display:flex;align-items:center;justify-content:center;padding:9px 12px;border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:600;background:{{ saveBg }};color:{{ saveColor }}" style-hover="background:{{ saveHoverBg }}">{{ saveLabel }}</div>
+              <sc-if value="{{ canDelete }}" hint-placeholder-val="{{ true }}">
+                <div onClick="{{ onDeleteTicket }}" style="display:flex;align-items:center;justify-content:center;padding:9px 12px;border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:600;background:#fff;color:#b91c1c;border:1px solid #fecaca;margin-top:8px" style-hover="background:#fef2f2">Delete ticket</div>
+              </sc-if>
+            </div>
+
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;font-size:12.5px;color:#4b5563;display:flex;flex-direction:column;gap:9px">
+              <div style="display:flex;justify-content:space-between"><span style="color:#9ca3af">Reporter</span><span style="font-weight:500;color:#1f2937">{{ ticket.reporter }}</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:#9ca3af">Created</span><span>{{ ticket.createdDisplay }}</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:#9ca3af">Updated</span><span>{{ ticket.updatedDisplay }}</span></div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- CREATE -->
+      <sc-if value="{{ isCreate }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:30px 32px 60px;max-width:640px">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:26px">
+            <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Type</div>
+            <div style="display:flex;gap:8px;margin-bottom:18px">
+              <sc-for list="{{ typeOptions }}" as="ty" hint-placeholder-count="3">
+                <div onClick="{{ ty.onClick }}" style="flex:1;text-align:center;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;border:1px solid {{ ty.border }};background:{{ ty.bg }};color:{{ ty.fg }}">{{ ty.name }}</div>
+              </sc-for>
+            </div>
+
+            <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Title</div>
+            <input value="{{ createForm.title }}" onChange="{{ onCreateTitleChange }}" placeholder="Short summary" style="width:100%;padding:9px 11px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;margin-bottom:18px;outline:none" />
+
+            <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Description</div>
+            <textarea value="{{ createForm.description }}" onChange="{{ onCreateDescChange }}" placeholder="Steps to reproduce, expected vs actual behavior…" style="width:100%;min-height:110px;padding:9px 11px;border:1px solid #e5e7eb;border-radius:8px;font-size:13.5px;margin-bottom:18px;resize:vertical;outline:none"></textarea>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+              <div>
+                <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Priority</div>
+                <select value="{{ createForm.priority }}" onChange="{{ onCreatePriorityChange }}" style="width:100%;padding:8px 9px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
+                  <sc-for list="{{ priorities }}" as="p" hint-placeholder-count="4"><option value="{{ p }}">{{ p }}</option></sc-for>
+                </select>
+              </div>
+              <sc-if value="{{ createIsBug }}" hint-placeholder-val="{{ true }}">
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Severity</div>
+                  <select value="{{ createForm.severity }}" onChange="{{ onCreateSeverityChange }}" style="width:100%;padding:8px 9px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
+                    <sc-for list="{{ severities }}" as="s" hint-placeholder-count="4"><option value="{{ s }}">{{ s }}</option></sc-for>
+                  </select>
+                </div>
+              </sc-if>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+              <div>
+                <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Assignee</div>
+                <select value="{{ createForm.assignee }}" onChange="{{ onCreateAssigneeChange }}" style="width:100%;padding:8px 9px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
+                  <sc-for list="{{ assignees }}" as="a" hint-placeholder-count="8"><option value="{{ a }}">{{ a }}</option></sc-for>
+                </select>
+              </div>
+              <sc-if value="{{ createIsBug }}" hint-placeholder-val="{{ true }}">
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Environment</div>
+                  <select value="{{ createForm.env }}" onChange="{{ onCreateEnvChange }}" style="width:100%;padding:8px 9px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
+                    <sc-for list="{{ envs }}" as="e" hint-placeholder-count="3"><option value="{{ e }}">{{ e }}</option></sc-for>
+                  </select>
+                </div>
+              </sc-if>
+            </div>
+
+            <sc-if value="{{ createIsStoryOrBug }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:22px">
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Epic</div>
+                  <select value="{{ createForm.epic }}" onChange="{{ onCreateEpicChange }}" style="width:100%;padding:8px 9px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
+                    <sc-for list="{{ epics }}" as="ep" hint-placeholder-count="5"><option value="{{ ep }}">{{ ep }}</option></sc-for>
+                  </select>
+                </div>
+                <sc-if value="{{ createIsBug }}" hint-placeholder-val="{{ true }}">
+                  <div>
+                    <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Story (optional)</div>
+                    <select value="{{ createForm.storyIdStr }}" onChange="{{ onCreateStoryIdChange }}" style="width:100%;padding:8px 9px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
+                      <sc-for list="{{ createStoryOptions }}" as="so" hint-placeholder-count="3"><option value="{{ so.value }}">{{ so.label }}</option></sc-for>
+                    </select>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;margin-bottom:22px">
+              <sc-if value="{{ createIsStoryOrBug }}" hint-placeholder-val="{{ true }}">
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Sprint</div>
+                  <select value="{{ createForm.sprint }}" onChange="{{ onCreateSprintChange }}" style="width:100%;padding:8px 9px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
+                    <sc-for list="{{ sprintOptions }}" as="sp" hint-placeholder-count="4"><option value="{{ sp }}">{{ sp }}</option></sc-for>
+                  </select>
+                </div>
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Size estimate</div>
+                  <select value="{{ createForm.size }}" onChange="{{ onCreateSizeChange }}" style="width:100%;padding:8px 9px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
+                    <sc-for list="{{ sizes }}" as="sz" hint-placeholder-count="5"><option value="{{ sz }}">{{ sz }}</option></sc-for>
+                  </select>
+                </div>
+              </sc-if>
+              <div>
+                <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Start date</div>
+                <input type="date" value="{{ createForm.startDate }}" onChange="{{ onCreateStartDateChange }}" style="width:100%;padding:8px 9px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px" />
+              </div>
+              <div>
+                <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Est. end date</div>
+                <input type="date" value="{{ createForm.estimatedEndDate }}" onChange="{{ onCreateEndDateChange }}" style="width:100%;padding:8px 9px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px" />
+              </div>
+            </div>
+
+            <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Tags (comma separated)</div>
+            <input value="{{ createForm.labels }}" onChange="{{ onCreateLabelsChange }}" placeholder="frontend, api" style="width:100%;padding:9px 11px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;margin-bottom:22px" />
+
+            <div style="display:flex;gap:10px;justify-content:flex-end;border-top:1px solid #f1f5f9;padding-top:18px">
+              <div onClick="{{ goList }}" style="padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;color:#4b5563;cursor:pointer;border:1px solid #e5e7eb" style-hover="background:#f9fafb">Cancel</div>
+              <div onClick="{{ onCreateSubmit }}" style="padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;background:#4f46e5" style-hover="background:#4338ca">Create ticket</div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- PEOPLE -->
+      <sc-if value="{{ isPeople }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:22px 32px 60px;max-width:900px">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+            <sc-if value="{{ canManageUsers }}" hint-placeholder-val="{{ true }}">
+              <div onClick="{{ goCreateUser }}" style="display:flex;align-items:center;gap:7px;padding:9px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;background:#4f46e5;color:#fff" style-hover="background:#4338ca">
+                <span style="font-size:15px;line-height:1">+</span> Add user
+              </div>
+            </sc-if>
+          </div>
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+            <div style="display:grid;grid-template-columns:36px 1fr 1fr 140px;padding:10px 18px;border-bottom:1px solid #e5e7eb;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;gap:10px">
+              <div></div><div>Name</div><div>Department</div><div>Role</div>
+            </div>
+            <sc-for list="{{ processedUsers }}" as="u" hint-placeholder-count="6">
+              <div onClick="{{ u.onClick }}" style="display:grid;grid-template-columns:36px 1fr 1fr 140px;padding:12px 18px;border-bottom:1px solid #f1f5f9;cursor:pointer;align-items:center;gap:10px" style-hover="background:#f9fafb">
+                <div style="width:28px;height:28px;border-radius:50%;background:#e0e7ff;color:#4338ca;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ u.initials }}</div>
+                <div>
+                  <div style="font-size:13.5px;font-weight:500;color:#1f2937">{{ u.name }}</div>
+                  <div style="font-size:11.5px;color:#9ca3af">{{ u.email }}</div>
+                </div>
+                <div style="font-size:12.5px;color:#4b5563">{{ u.department }}</div>
+                <div><span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:9px;background:{{ u.roleBg }};color:{{ u.roleColor }};white-space:nowrap">{{ u.role }}</span></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- USER DETAIL -->
+      <sc-if value="{{ isUserDetail }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:26px 32px 60px;max-width:520px">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px">
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:22px">
+              <div style="width:52px;height:52px;border-radius:50%;background:#e0e7ff;color:#4338ca;font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">{{ userDetail.initials }}</div>
+              <div>
+                <div style="font-size:18px;font-weight:700">{{ userDetail.name }}</div>
+                <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:9px;background:{{ userDetail.roleBg }};color:{{ userDetail.roleColor }};white-space:nowrap">{{ userDetail.role }}</span>
+              </div>
+            </div>
+
+            <sc-if value="{{ canManageUsers }}" hint-placeholder-val="{{ true }}">
+              <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Name</div>
+              <input value="{{ userDetail.name }}" onChange="{{ onUserNameChange }}" style="width:100%;padding:9px 11px;border:1px solid #e5e7eb;border-radius:8px;font-size:13.5px;margin-bottom:16px;outline:none" />
+              <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Email</div>
+              <input value="{{ userDetail.email }}" onChange="{{ onUserEmailChange }}" style="width:100%;padding:9px 11px;border:1px solid #e5e7eb;border-radius:8px;font-size:13.5px;margin-bottom:16px;outline:none" />
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Department</div>
+                  <select value="{{ userDetail.department }}" onChange="{{ onUserDeptChange }}" style="width:100%;padding:8px 9px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
+                    <sc-for list="{{ departments }}" as="d" hint-placeholder-count="8"><option value="{{ d }}">{{ d }}</option></sc-for>
+                  </select>
+                </div>
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Role</div>
+                  <select value="{{ userDetail.role }}" onChange="{{ onUserRoleChange }}" style="width:100%;padding:8px 9px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
+                    <sc-for list="{{ roles }}" as="r" hint-placeholder-count="3"><option value="{{ r }}">{{ r }}</option></sc-for>
+                  </select>
+                </div>
+              </div>
+              <div onClick="{{ onSaveUser }}" style="display:inline-block;padding:9px 16px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;background:#4f46e5;color:#fff" style-hover="background:#4338ca">{{ userSaveLabel }}</div>
+            </sc-if>
+
+            <div style="background:#f9fafb;border-radius:10px;padding:14px 16px;font-size:12.5px;color:#4b5563;display:flex;flex-direction:column;gap:8px;margin-top:20px">
+              <div style="display:flex;justify-content:space-between"><span style="color:#9ca3af">Email</span><span>{{ userDetail.email }}</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:#9ca3af">Department</span><span>{{ userDetail.department }}</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:#9ca3af">Role</span><span>{{ userDetail.role }}</span></div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- CREATE USER -->
+      <sc-if value="{{ isCreateUser }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:30px 32px 60px;max-width:520px">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:26px">
+            <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Name</div>
+            <input value="{{ newUserForm.name }}" onChange="{{ onNewUserNameChange }}" placeholder="Full name" style="width:100%;padding:9px 11px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;margin-bottom:18px;outline:none" />
+            <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Email</div>
+            <input value="{{ newUserForm.email }}" onChange="{{ onNewUserEmailChange }}" placeholder="name@nimbus.io" style="width:100%;padding:9px 11px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;margin-bottom:18px;outline:none" />
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:22px">
+              <div>
+                <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Department</div>
+                <select value="{{ newUserForm.department }}" onChange="{{ onNewUserDeptChange }}" style="width:100%;padding:8px 9px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
+                  <sc-for list="{{ departments }}" as="d" hint-placeholder-count="8"><option value="{{ d }}">{{ d }}</option></sc-for>
+                </select>
+              </div>
+              <div>
+                <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Role</div>
+                <select value="{{ newUserForm.role }}" onChange="{{ onNewUserRoleChange }}" style="width:100%;padding:8px 9px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
+                  <sc-for list="{{ roles }}" as="r" hint-placeholder-count="3"><option value="{{ r }}">{{ r }}</option></sc-for>
+                </select>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;border-top:1px solid #f1f5f9;padding-top:18px">
+              <div onClick="{{ goPeople }}" style="padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;color:#4b5563;cursor:pointer;border:1px solid #e5e7eb" style-hover="background:#f9fafb">Cancel</div>
+              <div onClick="{{ onCreateUserSubmit }}" style="padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;background:#4f46e5" style-hover="background:#4338ca">Add user</div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: {&quot;width&quot;: &quot;100%&quot;, &quot;height&quot;: &quot;100%&quot;},
+  &quot;defaultView&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;Overview&quot;, &quot;options&quot;: [&quot;Overview&quot;, &quot;List&quot;, &quot;Board&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Behavior&quot;},
+  &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;Comfortable&quot;, &quot;options&quot;: [&quot;Comfortable&quot;, &quot;Compact&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Behavior&quot;},
+  &quot;showHierarchy&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Behavior&quot;},
+  &quot;tagStyle&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;Colorful&quot;, &quot;options&quot;: [&quot;Colorful&quot;, &quot;Neutral&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Appearance&quot;}
+}">
+const STATUSES = ['Backlog', 'In Progress', 'In Review', 'Blocked', 'On Hold', 'Done'];
+const PRIORITIES = ['Critical', 'High', 'Medium', 'Low'];
+const SEVERITIES = ['1', '2', '3', '4'];
+const ASSIGNEES = ['Priya Nair', 'Marcus Chen', 'Elena Volkov', 'Sam Okafor', 'Jordan Lee', 'Diego Ramirez', 'Aisha Patel', 'Tom Whitfield'];
+const ENVS = ['Production', 'Staging', 'Development'];
+const EPICS = ['Sync Reliability', 'Platform Security', 'Mobile Experience', 'Billing & Growth', 'Core Platform'];
+const SIZES = ['XS', 'S', 'M', 'L', 'XL'];
+const SPRINTS = ['Sprint 24', 'Sprint 25', 'Sprint 26'];
+
+const COMPANY_NAME = 'Lumen Labs';
+const PROJECTS = ['Nimbus Triage', 'Atlas Billing', 'Vega Mobile'];
+const ROLES = ['Admin', 'Manager', 'Developer'];
+const DEPARTMENTS = ['Engineering Leadership', 'Engineering', 'Backend', 'Infrastructure', 'Mobile', 'SRE', 'Security', 'Product', 'Design', 'QA'];
+const ROLE_COLORS = {
+  'Admin': { fg: '#6d28d9', bg: '#ede9fe' },
+  'Manager': { fg: '#0369a1', bg: '#e0f2fe' },
+  'Developer': { fg: '#475569', bg: '#f1f5f9' },
+};
+function seedUsers() {
+  return [
+    { id: 1, name: 'Jordan Lee', email: 'jordan.lee@nimbus.io', department: 'Engineering Leadership', role: 'Admin' },
+    { id: 2, name: 'Priya Nair', email: 'priya.nair@nimbus.io', department: 'Engineering', role: 'Manager' },
+    { id: 3, name: 'Aisha Patel', email: 'aisha.patel@nimbus.io', department: 'Security', role: 'Manager' },
+    { id: 4, name: 'Marcus Chen', email: 'marcus.chen@nimbus.io', department: 'Backend', role: 'Developer' },
+    { id: 5, name: 'Elena Volkov', email: 'elena.volkov@nimbus.io', department: 'Backend', role: 'Developer' },
+    { id: 6, name: 'Sam Okafor', email: 'sam.okafor@nimbus.io', department: 'Infrastructure', role: 'Developer' },
+    { id: 7, name: 'Tom Whitfield', email: 'tom.whitfield@nimbus.io', department: 'Mobile', role: 'Developer' },
+    { id: 8, name: 'Diego Ramirez', email: 'diego.ramirez@nimbus.io', department: 'SRE', role: 'Developer' },
+  ];
+}
+const TYPES = ['Epic', 'Story', 'Bug'];
+const EPIC_STATUSES = ['Planned', 'In Progress', 'Done'];
+const STORY_STATUSES = ['Backlog', 'In Progress', 'In Review', 'Blocked', 'On Hold', 'Done'];
+const BUG_STATUSES = STATUSES;
+const STATUS_BY_TYPE = { Epic: EPIC_STATUSES, Story: STORY_STATUSES, Bug: BUG_STATUSES };
+const ALL_BOARD_STATUSES = ['Backlog', 'Planned', 'In Progress', 'In Review', 'Blocked', 'On Hold', 'Done'];
+const TYPE_COLORS = {
+  'Epic': { fg: '#6d28d9', bg: '#ede9fe' },
+  'Story': { fg: '#0f766e', bg: '#ccfbf1' },
+  'Bug': { fg: '#b91c1c', bg: '#fee2e2' },
+};
+
+const STATUS_COLORS = {
+  'Backlog': { fg: '#475569', bg: '#f1f5f9' },
+  'Planned': { fg: '#0369a1', bg: '#e0f2fe' },
+  'In Progress': { fg: '#1d4ed8', bg: '#dbeafe' },
+  'In Review': { fg: '#7e22ce', bg: '#f3e8ff' },
+  'Blocked': { fg: '#9f1239', bg: '#ffe4e6' },
+  'On Hold': { fg: '#92400e', bg: '#fef3c7' },
+  'Done': { fg: '#15803d', bg: '#dcfce7' },
+};
+const PRIORITY_COLORS = {
+  'Critical': { fg: '#b91c1c', bg: '#fee2e2' },
+  'High': { fg: '#c2410c', bg: '#ffedd5' },
+  'Medium': { fg: '#a16207', bg: '#fef9c3' },
+  'Low': { fg: '#475569', bg: '#f1f5f9' },
+};
+const SEV_COLORS = {
+  '1': { fg: '#b91c1c', bg: '#fee2e2' },
+  '2': { fg: '#c2410c', bg: '#ffedd5' },
+  '3': { fg: '#a16207', bg: '#fef9c3' },
+  '4': { fg: '#475569', bg: '#f1f5f9' },
+};
+const ENV_COLORS = {
+  'Production': { fg: '#fff', bg: '#0f172a' },
+  'Staging': { fg: '#92400e', bg: '#fef3c7' },
+  'Development': { fg: '#075985', bg: '#e0f2fe' },
+};
+const TAG_PALETTE = [
+  { fg: '#1d4ed8', bg: '#dbeafe' },
+  { fg: '#7e22ce', bg: '#f3e8ff' },
+  { fg: '#0f766e', bg: '#ccfbf1' },
+  { fg: '#b45309', bg: '#fef3c7' },
+  { fg: '#be185d', bg: '#fce7f3' },
+  { fg: '#4338ca', bg: '#e0e7ff' },
+  { fg: '#15803d', bg: '#dcfce7' },
+  { fg: '#b91c1c', bg: '#fee2e2' },
+];
+const NEUTRAL_TAG = { fg: '#475569', bg: '#f1f5f9' };
+
+function initials(name) {
+  return name.split(' ').map(p => p[0]).join('').toUpperCase();
+}
+function hashStr(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+function seedTickets() {
+  const raw = [
+    { title: 'Crash on large file upload (>2GB)', desc: 'App crashes with an OOM error when uploading files larger than 2GB over Wi-Fi. Reproducible on macOS and Windows desktop clients. Stack trace points to the chunked-upload buffer never being released.', status: 'In Progress', priority: 'Critical', severity: '1', assignee: 'Marcus Chen', reporter: 'QA Automation', labels: ['backend', 'performance'], created: '2026-07-01', updated: '2026-07-13', env: 'Production', epic: 'Sync Reliability', story: 'Large File Handling', size: 'XL', startDate: '2026-07-01', estimatedEndDate: '2026-07-20', sprint: 'Sprint 25', storyId: 201 },
+    { title: 'Sync conflict creates duplicate files instead of merging', desc: 'When two clients edit the same file offline and reconnect, Nimbus creates "file (1).docx" instead of prompting a merge/conflict resolution. Happens consistently with the desktop + mobile pairing.', status: 'Backlog', priority: 'High', severity: '2', assignee: 'Elena Volkov', reporter: 'Casey Kim', labels: ['sync', 'backend'], created: '2026-06-28', updated: '2026-07-10', env: 'Production', epic: 'Sync Reliability', story: 'Conflict Resolution', size: 'L', startDate: '2026-06-28', estimatedEndDate: '2026-07-09', sprint: 'Backlog', storyId: 202 },
+    { title: 'Memory leak in background sync worker', desc: 'Background worker memory grows unbounded over a multi-hour session, eventually forcing an OS-level kill on low-RAM machines.', status: 'In Progress', priority: 'Critical', severity: '1', assignee: 'Sam Okafor', reporter: 'Support Escalation', labels: ['backend', 'infra'], created: '2026-07-05', updated: '2026-07-14', env: 'Production', epic: 'Sync Reliability', story: 'Background Sync', size: 'XL', startDate: '2026-07-05', estimatedEndDate: '2026-07-24', sprint: 'Sprint 25', storyId: null },
+    { title: 'OAuth token refresh fails silently after 24h', desc: 'Refresh token exchange returns 200 but with an expired access token, leaving users logged out with no error surfaced in the UI.', status: 'In Review', priority: 'High', severity: '2', assignee: 'Aisha Patel', reporter: 'Diego Ramirez', labels: ['auth', 'api'], created: '2026-06-20', updated: '2026-07-12', env: 'Staging', epic: 'Platform Security', story: 'Auth Hardening', size: 'L', startDate: '2026-06-20', estimatedEndDate: '2026-07-01', sprint: 'Sprint 25', storyId: 203 },
+    { title: 'iOS app crashes opening native share sheet', desc: 'Tapping "Share" on a file preview crashes the app on iOS 18.1+. Only reproducible when sharing to Messages.', status: 'Backlog', priority: 'High', severity: '2', assignee: 'Tom Whitfield', reporter: 'App Store Review', labels: ['mobile'], created: '2026-07-08', updated: '2026-07-09', env: 'Production', epic: 'Mobile Experience', story: 'iOS Stability', size: 'L', startDate: '2026-07-08', estimatedEndDate: '2026-07-19', sprint: 'Sprint 26', storyId: 205 },
+    { title: 'Bulk delete API returns 500 above 200 items', desc: 'DELETE /v2/files/bulk throws an unhandled exception when the payload exceeds 200 file IDs; smaller batches succeed.', status: 'Done', priority: 'Medium', severity: '3', assignee: 'Priya Nair', reporter: 'Internal Tooling', labels: ['api', 'backend'], created: '2026-06-10', updated: '2026-06-19', env: 'Production', epic: 'Core Platform', story: 'Bulk Operations', size: 'M', startDate: '2026-06-10', estimatedEndDate: '2026-06-16', sprint: 'Sprint 24', storyId: null },
+    { title: 'Websocket reconnect storm after network blip', desc: 'A brief connectivity drop causes dozens of clients to reconnect simultaneously, spiking gateway CPU and briefly degrading realtime sync for everyone.', status: 'In Progress', priority: 'Critical', severity: '1', assignee: 'Diego Ramirez', reporter: 'SRE On-call', labels: ['infra', 'performance'], created: '2026-07-11', updated: '2026-07-14', env: 'Production', epic: 'Sync Reliability', story: 'Realtime Transport', size: 'XL', startDate: '2026-07-11', estimatedEndDate: '2026-07-30', sprint: 'Sprint 25', storyId: null },
+    { title: 'Timezone bug shows activity log times 5h off', desc: 'Activity feed renders timestamps in UTC instead of the user\'s local timezone for accounts created before the Q2 migration.', status: 'On Hold', priority: 'Low', severity: '4', assignee: 'Jordan Lee', reporter: 'Customer Support', labels: ['frontend'], created: '2026-06-25', updated: '2026-07-01', env: 'Production', epic: 'Core Platform', story: 'Activity Feed', size: 'S', startDate: '2026-06-25', estimatedEndDate: '2026-06-28', sprint: 'Sprint 26', storyId: null },
+    { title: 'Search index stale after file rename', desc: 'Renamed files remain searchable only by their old name for up to an hour, confusing users who search by new name.', status: 'In Review', priority: 'Medium', severity: '3', assignee: 'Elena Volkov', reporter: 'Casey Kim', labels: ['backend', 'data'], created: '2026-06-30', updated: '2026-07-11', env: 'Production', epic: 'Core Platform', story: 'Search', size: 'M', startDate: '2026-06-30', estimatedEndDate: '2026-07-06', sprint: 'Sprint 25', storyId: 209 },
+    { title: 'Permissions not enforced on shared folder subitems', desc: 'A viewer-only collaborator can still delete files nested inside a shared folder via the API, bypassing the folder-level permission check.', status: 'Blocked', priority: 'Critical', severity: '1', assignee: 'Aisha Patel', reporter: 'Security Audit', labels: ['security', 'auth'], created: '2026-07-12', updated: '2026-07-13', env: 'Production', epic: 'Platform Security', story: 'Access Control', size: 'XL', startDate: '2026-07-12', estimatedEndDate: '2026-07-31', sprint: 'Sprint 25', storyId: 204 },
+    { title: 'Drag-drop upload progress stuck at 99%', desc: 'Upload progress bar freezes at 99% for ~10s before completing; users repeatedly re-upload thinking it failed.', status: 'Done', priority: 'Low', severity: '4', assignee: 'Sam Okafor', reporter: 'Support Escalation', labels: ['frontend'], created: '2026-06-05', updated: '2026-06-14', env: 'Production', epic: 'Core Platform', story: 'Upload UX', size: 'S', startDate: '2026-06-05', estimatedEndDate: '2026-06-08', sprint: 'Sprint 24', storyId: null },
+    { title: 'Billing webhook fires duplicate charge events', desc: 'Stripe webhook retries are not deduplicated, resulting in a small number of accounts being double-charged on plan renewal.', status: 'In Progress', priority: 'Critical', severity: '1', assignee: 'Marcus Chen', reporter: 'Finance Team', labels: ['billing', 'backend'], created: '2026-07-09', updated: '2026-07-14', env: 'Production', epic: 'Billing & Growth', story: 'Billing Accuracy', size: 'XL', startDate: '2026-07-09', estimatedEndDate: '2026-07-28', sprint: 'Sprint 25', storyId: 207 },
+    { title: 'Dark mode: low contrast on file preview toolbar', desc: 'Toolbar icons on the file preview screen fall below WCAG AA contrast in dark mode.', status: 'Backlog', priority: 'Low', severity: '4', assignee: 'Tom Whitfield', reporter: 'Design Review', labels: ['frontend'], created: '2026-06-22', updated: '2026-06-30', env: 'Development', epic: 'Core Platform', story: 'Design Polish', size: 'S', startDate: '2026-06-22', estimatedEndDate: '2026-06-25', sprint: 'Backlog', storyId: null },
+    { title: 'CSV export truncates non-Latin filenames', desc: 'Exported activity CSVs mangle filenames containing CJK or Cyrillic characters due to a missing UTF-8 BOM.', status: 'In Review', priority: 'Medium', severity: '3', assignee: 'Priya Nair', reporter: 'Customer Support', labels: ['data', 'backend'], created: '2026-07-02', updated: '2026-07-10', env: 'Production', epic: 'Core Platform', story: 'Data Export', size: 'M', startDate: '2026-07-02', estimatedEndDate: '2026-07-08', sprint: 'Sprint 25', storyId: 210 },
+    { title: 'Notification digest emails sent twice', desc: 'Some users report receiving the weekly digest email two minutes apart, likely a duplicate cron trigger during deploys.', status: 'On Hold', priority: 'Medium', severity: '3', assignee: 'Jordan Lee', reporter: 'Support Escalation', labels: ['infra'], created: '2026-07-06', updated: '2026-07-08', env: 'Production', epic: 'Core Platform', story: 'Notifications', size: 'M', startDate: '2026-07-06', estimatedEndDate: '2026-07-12', sprint: 'Sprint 26', storyId: null },
+    { title: 'Admin console 404s after switching orgs', desc: 'Switching organizations from the admin console dropdown navigates to a stale org-scoped URL that 404s instead of the new org\'s dashboard.', status: 'Done', priority: 'High', severity: '2', assignee: 'Diego Ramirez', reporter: 'Casey Kim', labels: ['frontend'], created: '2026-06-01', updated: '2026-06-08', env: 'Production', epic: 'Core Platform', story: 'Admin Console', size: 'L', startDate: '2026-06-01', estimatedEndDate: '2026-06-12', sprint: 'Sprint 24', storyId: null },
+    { title: 'Video thumbnail generation times out on 4K clips', desc: 'Thumbnails never generate for 4K video uploads over 500MB; the worker job silently times out after 30s.', status: 'In Progress', priority: 'Medium', severity: '3', assignee: 'Elena Volkov', reporter: 'QA Automation', labels: ['backend', 'performance'], created: '2026-07-04', updated: '2026-07-13', env: 'Staging', epic: 'Core Platform', story: 'Media Processing', size: 'M', startDate: '2026-07-04', estimatedEndDate: '2026-07-10', sprint: 'Sprint 25', storyId: null },
+    { title: 'Android 14 push notifications not delivered', desc: 'Push notifications silently fail to arrive on Android 14 devices with battery optimization enabled for Nimbus.', status: 'Backlog', priority: 'High', severity: '2', assignee: 'Aisha Patel', reporter: 'App Store Review', labels: ['mobile'], created: '2026-07-10', updated: '2026-07-11', env: 'Production', epic: 'Mobile Experience', story: 'Android Notifications', size: 'L', startDate: '2026-07-10', estimatedEndDate: '2026-07-21', sprint: 'Sprint 26', storyId: 206 },
+    { title: 'Rate limiter blocks legitimate bulk uploads', desc: 'Enterprise customers uploading >500 files/min are rate-limited alongside abusive traffic, with no allowlist mechanism.', status: 'Blocked', priority: 'High', severity: '2', assignee: 'Sam Okafor', reporter: 'Enterprise Support', labels: ['infra', 'api'], created: '2026-06-27', updated: '2026-07-09', env: 'Production', epic: 'Platform Security', story: 'Rate Limiting', size: 'L', startDate: '2026-06-27', estimatedEndDate: '2026-07-08', sprint: 'Sprint 25', storyId: null },
+    { title: 'Session stays valid after password reset', desc: 'Existing sessions/tokens remain valid for up to 15 minutes after a user resets their password, a window flagged by our pentest.', status: 'Backlog', priority: 'Critical', severity: '1', assignee: 'Priya Nair', reporter: 'Security Audit', labels: ['security', 'auth'], created: '2026-07-13', updated: '2026-07-13', env: 'Production', epic: 'Platform Security', story: 'Auth Hardening', size: 'XL', startDate: '2026-07-13', estimatedEndDate: '2026-08-01', sprint: 'Backlog', storyId: 203 },
+  ];
+  const comments = [
+    [{ author: 'Marcus Chen', time: '2 days ago', text: 'Repro\'d locally — the chunk buffer array is never sliced after flush. Working on a fix.' }],
+    [],
+    [{ author: 'Sam Okafor', time: '1 day ago', text: 'Heap snapshot shows the WS listener retaining closed connections. Patch in review.' }, { author: 'Jordan Lee', time: '5 hours ago', text: 'Nice catch — can we get this into tomorrow\'s hotfix train?' }],
+    [{ author: 'Aisha Patel', time: '3 days ago', text: 'Confirmed the refresh endpoint doesn\'t validate expiry before signing a new token.' }],
+    [],
+    [{ author: 'Priya Nair', time: '3 weeks ago', text: 'Shipped a batch size cap of 200 with a clear 413 response. Closing.' }],
+    [{ author: 'Diego Ramirez', time: '6 hours ago', text: 'Adding exponential backoff with jitter to the reconnect logic.' }],
+    [],
+    [{ author: 'Elena Volkov', time: '4 days ago', text: 'Index TTL is the culprit — reducing from 60min to 5min for renamed docs.' }],
+    [{ author: 'Aisha Patel', time: '1 day ago', text: 'This is a real vuln — escalating priority to Critical and blocking release until fixed.' }],
+    [{ author: 'Sam Okafor', time: '5 weeks ago', text: 'Was a client-side rendering bug in the progress bar, not the actual upload. Fixed.' }],
+    [{ author: 'Marcus Chen', time: '4 days ago', text: 'Adding an idempotency key to the webhook handler.' }],
+    [],
+    [{ author: 'Priya Nair', time: '2 days ago', text: 'Adding UTF-8 BOM to the export stream fixes this in my local test.' }],
+    [],
+    [{ author: 'Diego Ramirez', time: '5 weeks ago', text: 'Root cause was a duplicate cron entry from the blue/green deploy. Removed.' }],
+    [{ author: 'Elena Volkov', time: '2 days ago', text: 'Bumping the worker timeout to 120s for anything over 1080p.' }],
+    [],
+    [{ author: 'Sam Okafor', time: '5 days ago', text: 'Proposing an allowlist flag on enterprise org records — blocked on product sign-off.' }],
+    [{ author: 'Priya Nair', time: '6 hours ago', text: 'Flagging as Critical per pentest report — needs a fix this sprint.' }],
+  ];
+  const bugs = raw.map((r, i) => ({
+    id: i + 1,
+    key: 'BUG-' + (401 + i),
+    type: 'Bug',
+    title: r.title,
+    description: r.desc,
+    status: r.status,
+    priority: r.priority,
+    severity: r.severity,
+    assignee: r.assignee,
+    reporter: r.reporter,
+    labels: r.labels,
+    createdAt: r.created,
+    updatedAt: r.updated,
+    env: r.env,
+    epic: r.epic,
+    story: r.story,
+    storyId: r.storyId,
+    size: r.size,
+    startDate: r.startDate,
+    estimatedEndDate: r.estimatedEndDate,
+    sprint: r.sprint,
+    comments: comments[i],
+  }));
+
+  const epicRaw = [
+    { title: 'Sync Reliability', desc: 'Make cross-device sync resilient to conflicts, large files, and background failures.', status: 'In Progress', assignee: 'Elena Volkov', reporter: 'Product', labels: ['roadmap'], created: '2026-05-01', updated: '2026-07-13' },
+    { title: 'Platform Security', desc: 'Close access-control and auth gaps surfaced by the Q2 security audit.', status: 'In Progress', assignee: 'Aisha Patel', reporter: 'Product', labels: ['roadmap', 'security'], created: '2026-05-10', updated: '2026-07-13' },
+    { title: 'Mobile Experience', desc: 'Stabilize the iOS and Android clients and their notification pipelines.', status: 'Planned', assignee: 'Tom Whitfield', reporter: 'Product', labels: ['roadmap', 'mobile'], created: '2026-06-01', updated: '2026-07-09' },
+    { title: 'Billing & Growth', desc: 'Ensure billing accuracy and a smooth upgrade path as we scale plans.', status: 'Planned', assignee: 'Marcus Chen', reporter: 'Product', labels: ['roadmap', 'billing'], created: '2026-06-15', updated: '2026-07-09' },
+    { title: 'Core Platform', desc: 'Address a long tail of platform rough edges: search, export, admin tooling.', status: 'In Progress', assignee: 'Priya Nair', reporter: 'Product', labels: ['roadmap'], created: '2026-04-01', updated: '2026-07-11' },
+  ];
+  const epics = epicRaw.map((r, i) => ({
+    id: 101 + i,
+    key: 'EPC-' + (i + 1),
+    type: 'Epic',
+    title: r.title,
+    description: r.desc,
+    status: r.status,
+    priority: 'Medium',
+    severity: null,
+    assignee: r.assignee,
+    reporter: r.reporter,
+    labels: r.labels,
+    createdAt: r.created,
+    updatedAt: r.updated,
+    env: null,
+    epic: null,
+    story: null,
+    storyId: null,
+    size: null,
+    startDate: r.created,
+    estimatedEndDate: null,
+    sprint: null,
+    comments: [],
+  }));
+
+  const storyRaw = [
+    { title: 'Large File Handling', epic: 'Sync Reliability', status: 'In Progress', assignee: 'Marcus Chen', size: 'L', created: '2026-06-20', updated: '2026-07-13', sprint: 'Sprint 25' },
+    { title: 'Conflict Resolution', epic: 'Sync Reliability', status: 'Backlog', assignee: 'Elena Volkov', size: 'L', created: '2026-06-20', updated: '2026-07-10', sprint: 'Backlog' },
+    { title: 'Auth Hardening', epic: 'Platform Security', status: 'In Review', assignee: 'Aisha Patel', size: 'M', created: '2026-06-01', updated: '2026-07-13', sprint: 'Sprint 25' },
+    { title: 'Access Control', epic: 'Platform Security', status: 'Backlog', assignee: 'Aisha Patel', size: 'M', created: '2026-06-15', updated: '2026-07-13', sprint: 'Sprint 25' },
+    { title: 'iOS Stability', epic: 'Mobile Experience', status: 'Backlog', assignee: 'Tom Whitfield', size: 'M', created: '2026-06-25', updated: '2026-07-09', sprint: 'Sprint 26' },
+    { title: 'Android Notifications', epic: 'Mobile Experience', status: 'Backlog', assignee: 'Aisha Patel', size: 'M', created: '2026-06-25', updated: '2026-07-11', sprint: 'Sprint 26' },
+    { title: 'Billing Accuracy', epic: 'Billing & Growth', status: 'In Progress', assignee: 'Marcus Chen', size: 'L', created: '2026-06-15', updated: '2026-07-14', sprint: 'Sprint 25' },
+    { title: 'Plan Upgrade Flow', epic: 'Billing & Growth', status: 'Backlog', assignee: 'Marcus Chen', size: 'M', created: '2026-06-15', updated: '2026-06-15', sprint: 'Backlog' },
+    { title: 'Search', epic: 'Core Platform', status: 'In Review', assignee: 'Elena Volkov', size: 'S', created: '2026-06-25', updated: '2026-07-11', sprint: 'Sprint 25' },
+    { title: 'Data Export', epic: 'Core Platform', status: 'In Review', assignee: 'Priya Nair', size: 'S', created: '2026-06-25', updated: '2026-07-10', sprint: 'Sprint 25' },
+  ];
+  const stories = storyRaw.map((r, i) => ({
+    id: 201 + i,
+    key: 'STY-' + (i + 1),
+    type: 'Story',
+    title: r.title,
+    description: 'Story tracking work under the ' + r.epic + ' epic.',
+    status: r.status,
+    priority: 'Medium',
+    severity: null,
+    assignee: r.assignee,
+    reporter: 'Product',
+    labels: [],
+    createdAt: r.created,
+    updatedAt: r.updated,
+    env: null,
+    epic: r.epic,
+    story: null,
+    storyId: null,
+    size: r.size,
+    startDate: r.created,
+    estimatedEndDate: null,
+    sprint: r.sprint,
+    comments: [],
+  }));
+
+  return [...epics, ...stories, ...bugs];
+}
+
+function fmtDate(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+class Component extends DCLogic {
+  state = {
+    view: 'overview',
+    selectedId: null,
+    tickets: seedTickets(),
+    filters: { status: 'All', priority: 'All', assignee: 'All', env: 'All', epic: 'All', type: 'All', search: '' },
+    boardSprint: 'All',
+    boardType: 'All',
+    project: PROJECTS[0],
+    projectMenuOpen: false,
+    users: seedUsers(),
+    currentUserId: 1,
+    userMenuOpen: false,
+    selectedUserId: null,
+    userDraft: null,
+    userJustSaved: false,
+    newUserForm: null,
+    newComment: '',
+    createForm: { type: 'Bug', title: '', description: '', priority: 'Medium', severity: '3', assignee: ASSIGNEES[0], env: ENVS[0], epic: EPICS[0], story: '', storyIdStr: '', labels: '', size: 'M', startDate: '2026-07-14', estimatedEndDate: '2026-07-21', sprint: 'Backlog' },
+  };
+
+  componentDidMount() {
+    const dv = (this.props.defaultView || 'Overview').toLowerCase();
+    if (dv !== 'overview') this.setState({ view: dv });
+  }
+
+  goTo(view, id) {
+    if (view === 'detail' && id != null) {
+      const t = this.state.tickets.find(x => x.id === id);
+      const draft = t ? { status: t.status, priority: t.priority, assignee: t.assignee, env: t.env, size: t.size, startDate: t.startDate, estimatedEndDate: t.estimatedEndDate, sprint: t.sprint, epic: t.epic, storyId: t.storyId } : null;
+      this.setState({ view, selectedId: id, detailDraft: draft, justSaved: false });
+    } else {
+      this.setState({ view, selectedId: id != null ? id : null });
+    }
+  }
+  goOverview = () => this.goTo('overview');
+  goList = () => this.goTo('list');
+  goBoard = () => this.goTo('board');
+  goCreate = () => this.goTo('create');
+  goPeople = () => this.setState({ view: 'people' });
+  goUserDetail = (userId) => {
+    const u = this.state.users.find(x => x.id === userId);
+    this.setState({ view: 'userDetail', selectedUserId: userId, userDraft: u ? { ...u } : null, userJustSaved: false });
+  };
+  goCreateUser = () => {
+    this.setState({ view: 'createUser', newUserForm: { name: '', email: '', department: DEPARTMENTS[0], role: 'Developer' } });
+  };
+
+  onSearchChange = (e) => this.setState(s => ({ filters: { ...s.filters, search: e.target.value } }));
+  onStatusFilterChange = (e) => this.setState(s => ({ filters: { ...s.filters, status: e.target.value } }));
+  onPriorityFilterChange = (e) => this.setState(s => ({ filters: { ...s.filters, priority: e.target.value } }));
+  onAssigneeFilterChange = (e) => this.setState(s => ({ filters: { ...s.filters, assignee: e.target.value } }));
+  onEnvFilterChange = (e) => this.setState(s => ({ filters: { ...s.filters, env: e.target.value } }));
+  onEpicFilterChange = (e) => this.setState(s => ({ filters: { ...s.filters, epic: e.target.value } }));
+  onTypeFilterChange = (e) => this.setState(s => ({ filters: { ...s.filters, type: e.target.value } }));
+  onBoardSprintChange = (e) => this.setState({ boardSprint: e.target.value });
+  onBoardTypeChange = (e) => this.setState({ boardType: e.target.value });
+  toggleProjectMenu = () => this.setState(s => ({ projectMenuOpen: !s.projectMenuOpen }));
+  selectProject = (project) => this.setState({ project, projectMenuOpen: false });
+
+  toggleUserMenu = () => this.setState(s => ({ userMenuOpen: !s.userMenuOpen }));
+  switchCurrentUser = (userId) => this.setState({ currentUserId: userId, userMenuOpen: false });
+
+  updateUserDraftField(field, value) {
+    this.setState(s => ({ userDraft: { ...s.userDraft, [field]: value }, userJustSaved: false }));
+  }
+  onUserNameChange = (e) => this.updateUserDraftField('name', e.target.value);
+  onUserEmailChange = (e) => this.updateUserDraftField('email', e.target.value);
+  onUserDeptChange = (e) => this.updateUserDraftField('department', e.target.value);
+  onUserRoleChange = (e) => this.updateUserDraftField('role', e.target.value);
+  onSaveUser = () => {
+    const draft = this.state.userDraft;
+    if (!draft) return;
+    this.setState(s => ({
+      users: s.users.map(u => u.id === draft.id ? { ...draft } : u),
+      userJustSaved: true,
+    }));
+  };
+
+  onNewUserNameChange = (e) => this.setState(s => ({ newUserForm: { ...s.newUserForm, name: e.target.value } }));
+  onNewUserEmailChange = (e) => this.setState(s => ({ newUserForm: { ...s.newUserForm, email: e.target.value } }));
+  onNewUserDeptChange = (e) => this.setState(s => ({ newUserForm: { ...s.newUserForm, department: e.target.value } }));
+  onNewUserRoleChange = (e) => this.setState(s => ({ newUserForm: { ...s.newUserForm, role: e.target.value } }));
+  onCreateUserSubmit = () => {
+    const f = this.state.newUserForm;
+    if (!f || !f.name.trim()) return;
+    const nextId = Math.max(0, ...this.state.users.map(u => u.id)) + 1;
+    const newUser = { id: nextId, name: f.name.trim(), email: f.email.trim() || (f.name.trim().toLowerCase().replace(/\s+/g, '.') + '@nimbus.io'), department: f.department, role: f.role };
+    this.setState(s => ({ users: [...s.users, newUser] }));
+    this.goUserDetail(nextId);
+  };
+  onDeleteTicket = () => {
+    const id = this.state.selectedId;
+    if (id == null) return;
+    this.setState(s => ({ tickets: s.tickets.filter(t => t.id !== id) }));
+    this.goList();
+  };
+
+  updateTicketField(id, field, value) {
+    this.setState(s => ({
+      tickets: s.tickets.map(t => t.id === id ? { ...t, [field]: value, updatedAt: '2026-07-14' } : t),
+    }));
+  }
+  updateDraftField(field, value) {
+    this.setState(s => ({ detailDraft: { ...s.detailDraft, [field]: value }, justSaved: false }));
+  }
+  onDetailStatusChange = (e) => this.updateDraftField('status', e.target.value);
+  onDetailPriorityChange = (e) => this.updateDraftField('priority', e.target.value);
+  onDetailAssigneeChange = (e) => this.updateDraftField('assignee', e.target.value);
+  onDetailEnvChange = (e) => this.updateDraftField('env', e.target.value);
+  onDetailSizeChange = (e) => this.updateDraftField('size', e.target.value);
+  onDetailStartDateChange = (e) => this.updateDraftField('startDate', e.target.value);
+  onDetailEndDateChange = (e) => this.updateDraftField('estimatedEndDate', e.target.value);
+  onDetailSprintChange = (e) => this.updateDraftField('sprint', e.target.value);
+  onDetailEpicChange = (e) => this.updateDraftField('epic', e.target.value);
+  onDetailStoryChange = (e) => this.updateDraftField('storyId', e.target.value === '' ? null : Number(e.target.value));
+  onSaveDetail = () => {
+    const id = this.state.selectedId;
+    const draft = this.state.detailDraft;
+    if (id == null || !draft) return;
+    this.setState(s => ({
+      tickets: s.tickets.map(t => t.id === id ? { ...t, ...draft, updatedAt: '2026-07-14' } : t),
+      justSaved: true,
+    }));
+  };
+
+  onNewCommentChange = (e) => this.setState({ newComment: e.target.value });
+  onAddComment = () => {
+    const text = this.state.newComment.trim();
+    if (!text) return;
+    const id = this.state.selectedId;
+    this.setState(s => ({
+      tickets: s.tickets.map(t => t.id === id ? { ...t, comments: [...t.comments, { author: 'Jordan Lee', time: 'just now', text }], updatedAt: '2026-07-14' } : t),
+      newComment: '',
+    }));
+  };
+
+  allowDrop = (e) => e.preventDefault();
+  moveTicket = (id, status) => {
+    if (id == null) return;
+    this.setState(s => ({
+      tickets: s.tickets.map(t => {
+        if (t.id !== id) return t;
+        const allowed = STATUS_BY_TYPE[t.type] || STATUSES;
+        if (!allowed.includes(status)) return t;
+        return { ...t, status, updatedAt: '2026-07-14' };
+      }),
+    }));
+  };
+
+  onCreateTitleChange = (e) => this.setState(s => ({ createForm: { ...s.createForm, title: e.target.value } }));
+  onCreateDescChange = (e) => this.setState(s => ({ createForm: { ...s.createForm, description: e.target.value } }));
+  onCreatePriorityChange = (e) => this.setState(s => ({ createForm: { ...s.createForm, priority: e.target.value } }));
+  onCreateSeverityChange = (e) => this.setState(s => ({ createForm: { ...s.createForm, severity: e.target.value } }));
+  onCreateAssigneeChange = (e) => this.setState(s => ({ createForm: { ...s.createForm, assignee: e.target.value } }));
+  onCreateEnvChange = (e) => this.setState(s => ({ createForm: { ...s.createForm, env: e.target.value } }));
+  onCreateSizeChange = (e) => this.setState(s => ({ createForm: { ...s.createForm, size: e.target.value } }));
+  onCreateStartDateChange = (e) => this.setState(s => ({ createForm: { ...s.createForm, startDate: e.target.value } }));
+  onCreateEndDateChange = (e) => this.setState(s => ({ createForm: { ...s.createForm, estimatedEndDate: e.target.value } }));
+  onCreateSprintChange = (e) => this.setState(s => ({ createForm: { ...s.createForm, sprint: e.target.value } }));
+  onCreateTypeChange = (type) => this.setState(s => ({ createForm: { ...s.createForm, type } }));
+  onCreateEpicChange = (e) => this.setState(s => ({ createForm: { ...s.createForm, epic: e.target.value } }));
+  onCreateStoryChange = (e) => this.setState(s => ({ createForm: { ...s.createForm, story: e.target.value } }));
+  onCreateStoryIdChange = (e) => this.setState(s => ({ createForm: { ...s.createForm, storyIdStr: e.target.value } }));
+  onCreateLabelsChange = (e) => this.setState(s => ({ createForm: { ...s.createForm, labels: e.target.value } }));
+  onCreateSubmit = () => {
+    const f = this.state.createForm;
+    const type = f.type || 'Bug';
+    const title = f.title.trim() || 'Untitled ' + type.toLowerCase();
+    const nextId = Math.max(0, ...this.state.tickets.map(t => t.id)) + 1;
+    const keyPrefix = type === 'Epic' ? 'EPC-' : (type === 'Story' ? 'STY-' : 'BUG-');
+    const defaultStatus = STATUS_BY_TYPE[type][0];
+    const newTicket = {
+      id: nextId,
+      key: keyPrefix + nextId,
+      type,
+      title,
+      description: f.description.trim() || 'No description provided.',
+      status: defaultStatus,
+      priority: f.priority,
+      severity: type === 'Bug' ? f.severity : null,
+      assignee: f.assignee,
+      reporter: 'Jordan Lee',
+      labels: f.labels.split(',').map(l => l.trim()).filter(Boolean),
+      createdAt: '2026-07-14',
+      updatedAt: '2026-07-14',
+      env: type === 'Bug' ? f.env : null,
+      epic: type === 'Epic' ? null : f.epic,
+      story: type === 'Bug' && f.storyIdStr === '' ? f.story.trim() : null,
+      storyId: type === 'Bug' && f.storyIdStr !== '' ? Number(f.storyIdStr) : null,
+      size: type === 'Epic' ? null : f.size,
+      startDate: f.startDate,
+      estimatedEndDate: type === 'Epic' ? null : f.estimatedEndDate,
+      sprint: type === 'Epic' ? null : f.sprint,
+      comments: [],
+    };
+    this.setState(s => ({
+      tickets: [newTicket, ...s.tickets],
+      createForm: { type: 'Bug', title: '', description: '', priority: 'Medium', severity: '3', assignee: ASSIGNEES[0], env: ENVS[0], epic: EPICS[0], story: '', storyIdStr: '', labels: '', size: 'M', startDate: '2026-07-14', estimatedEndDate: '2026-07-21', sprint: 'Backlog' },
+    }));
+    this.goTo('detail', nextId);
+  };
+
+  tagObjs(labels) {
+    const style = this.props.tagStyle || 'Colorful';
+    return labels.map(name => {
+      const c = style === 'Neutral' ? NEUTRAL_TAG : TAG_PALETTE[hashStr(name) % TAG_PALETTE.length];
+      return { name, fg: c.fg, bg: c.bg };
+    });
+  }
+
+  processTicket(t, allTickets) {
+    const sc = STATUS_COLORS[t.status] || STATUS_COLORS['Backlog'];
+    const pc = PRIORITY_COLORS[t.priority] || PRIORITY_COLORS['Low'];
+    const ec = ENV_COLORS[t.env] || ENV_COLORS['Production'];
+    const tc = TYPE_COLORS[t.type] || TYPE_COLORS['Bug'];
+    const isBug = t.type === 'Bug';
+    const isEpic = t.type === 'Epic';
+    let storyLabel = t.story;
+    if (isBug && t.storyId != null && allTickets) {
+      const st = allTickets.find(x => x.id === t.storyId);
+      if (st) storyLabel = st.title;
+    }
+    return {
+      ...t,
+      statusColor: sc.fg, statusBg: sc.bg,
+      priorityColor: pc.fg, priorityBg: pc.bg,
+      envColor: ec.fg, envBg: ec.bg,
+      typeColor: tc.fg, typeBg: tc.bg,
+      typeInitial: t.type[0],
+      isBug, isEpic, isStoryOrBug: !isEpic,
+      breadcrumb: isEpic ? '' : (t.type === 'Story' ? t.epic : (storyLabel ? t.epic + ' ▸ ' + storyLabel : t.epic)),
+      showBreadcrumb: (this.props.showHierarchy !== false) && !isEpic,
+      createdDisplay: fmtDate(t.createdAt),
+      updatedDisplay: t.updatedAt ? fmtDate(t.updatedAt) : '—',
+      assigneeInitials: initials(t.assignee),
+      onClick: () => this.goTo('detail', t.id),
+      onDragStart: () => { this.draggingId = t.id; },
+    };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const view = s.view;
+    const isOverview = view === 'overview';
+    const isList = view === 'list';
+    const isBoard = view === 'board';
+    const isDetail = view === 'detail';
+    const isCreate = view === 'create';
+    const isPeople = view === 'people';
+    const isUserDetail = view === 'userDetail';
+    const isCreateUser = view === 'createUser';
+    const density = this.props.density || 'Comfortable';
+    const showHierarchy = this.props.showHierarchy !== false;
+
+    const currentUser = s.users.find(u => u.id === s.currentUserId) || s.users[0];
+    const role = currentUser.role;
+    const canManageUsers = role === 'Admin';
+    const canCreateEpic = role !== 'Developer';
+    const canDelete = role !== 'Developer';
+    const rc = ROLE_COLORS[role] || ROLE_COLORS['Developer'];
+
+    const allProcessed = s.tickets.map(t => this.processTicket(t, s.tickets));
+
+    const openCount = s.tickets.filter(t => t.status !== 'Done').length;
+    const criticalOpen = s.tickets.filter(t => t.status !== 'Done' && t.priority === 'Critical').length;
+    const doneTickets = s.tickets.filter(t => t.status === 'Done');
+    const avgResolutionDays = doneTickets.length
+      ? (doneTickets.reduce((sum, t) => sum + (new Date(t.updatedAt) - new Date(t.createdAt)) / 86400000, 0) / doneTickets.length).toFixed(1)
+      : '0.0';
+    const now = new Date('2026-07-14T00:00:00');
+    const createdThisWeek = s.tickets.filter(t => (now - new Date(t.createdAt)) / 86400000 <= 7).length;
+
+    const total = s.tickets.length || 1;
+    const statusBreakdown = STATUSES.map(name => {
+      const count = s.tickets.filter(t => t.status === name).length;
+      return { name, count, pct: Math.round((count / total) * 100), color: STATUS_COLORS[name].fg };
+    });
+    const priorityBreakdown = PRIORITIES.map(name => ({
+      name, count: s.tickets.filter(t => t.priority === name).length,
+      fg: PRIORITY_COLORS[name].fg, bg: PRIORITY_COLORS[name].bg,
+    }));
+
+    const recentActivity = [...allProcessed].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, 5);
+
+    const q = s.filters.search.trim().toLowerCase();
+    const filteredTickets = allProcessed.filter(t => {
+      if (s.filters.status !== 'All' && t.status !== s.filters.status) return false;
+      if (s.filters.priority !== 'All' && t.priority !== s.filters.priority) return false;
+      if (s.filters.assignee !== 'All' && t.assignee !== s.filters.assignee) return false;
+      if (s.filters.env !== 'All' && t.env !== s.filters.env) return false;
+      if (s.filters.epic !== 'All' && t.epic !== s.filters.epic) return false;
+      if (s.filters.type !== 'All' && t.type !== s.filters.type) return false;
+      if (q && !(t.title.toLowerCase().includes(q) || t.key.toLowerCase().includes(q) || t.assignee.toLowerCase().includes(q))) return false;
+      return true;
+    }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    const boardSprint = s.boardSprint;
+    const boardType = s.boardType;
+    let boardScoped = boardSprint === 'All' ? allProcessed : allProcessed.filter(t => t.sprint === boardSprint);
+    if (boardType !== 'All') boardScoped = boardScoped.filter(t => t.type === boardType);
+    const boardStatuses = boardType === 'All' ? ALL_BOARD_STATUSES : STATUS_BY_TYPE[boardType];
+    const boardColumns = boardStatuses.map(name => ({
+      name,
+      count: boardScoped.filter(t => t.status === name).length,
+      tickets: boardScoped.filter(t => t.status === name),
+      onDrop: (e) => { e.preventDefault(); this.moveTicket(this.draggingId, name); },
+    }));
+
+    let ticket = null;
+    let isDirty = false;
+    if (isDetail) {
+      const found = s.tickets.find(t => t.id === s.selectedId) || s.tickets[0];
+      const draft = s.detailDraft || { status: found.status, priority: found.priority, assignee: found.assignee, env: found.env, size: found.size, startDate: found.startDate, estimatedEndDate: found.estimatedEndDate, sprint: found.sprint, epic: found.epic, storyId: found.storyId };
+      isDirty = Object.keys(draft).some(k => draft[k] !== found[k]);
+      const merged = { ...found, ...draft };
+      const p = this.processTicket(merged, s.tickets);
+      const sevc = SEV_COLORS[merged.severity] || SEV_COLORS['3'];
+      const storiesUnderEpic = s.tickets.filter(t => t.type === 'Story' && t.epic === merged.epic);
+      ticket = {
+        ...p,
+        severityColor: sevc.fg, severityBg: sevc.bg,
+        commentCount: found.comments.length,
+        comments: found.comments.map(c => ({ ...c, initials: initials(c.author) })),
+        tags: this.tagObjs(found.labels),
+        statusOptions: STATUS_BY_TYPE[merged.type] || BUG_STATUSES,
+        storyIdStr: merged.storyId == null ? '' : String(merged.storyId),
+        storyOptions: [{ value: '', label: 'None' }, ...storiesUnderEpic.map(st => ({ value: String(st.id), label: st.title }))],
+      };
+    }
+
+    const processedUsers = s.users.map(u => {
+      const urc = ROLE_COLORS[u.role] || ROLE_COLORS['Developer'];
+      return { ...u, roleColor: urc.fg, roleBg: urc.bg, initials: initials(u.name), onClick: () => this.goUserDetail(u.id) };
+    });
+
+    let userDetail = null;
+    if (isUserDetail) {
+      const foundUser = s.users.find(u => u.id === s.selectedUserId) || s.users[0];
+      const draftU = s.userDraft || foundUser;
+      const urc = ROLE_COLORS[draftU.role] || ROLE_COLORS['Developer'];
+      userDetail = { ...draftU, roleColor: urc.fg, roleBg: urc.bg, initials: initials(draftU.name) };
+    }
+
+    const viewTitleMap = {
+      overview: 'Overview',
+      list: 'Tickets',
+      board: 'Board',
+      detail: ticket ? ticket.key + ' — ' + ticket.title : '',
+      create: 'New ticket',
+      people: 'People',
+      userDetail: userDetail ? userDetail.name : '',
+      createUser: 'Add team member',
+    };
+
+    return {
+      isOverview, isList, isBoard, isDetail, isCreate, isPeople, isUserDetail, isCreateUser, showHierarchy,
+      navOverviewColor: isOverview ? '#fff' : '#a5adc6',
+      navListColor: (isList || isDetail) ? '#fff' : '#a5adc6',
+      navBoardColor: isBoard ? '#fff' : '#a5adc6',
+      navPeopleColor: (isPeople || isUserDetail || isCreateUser) ? '#fff' : '#a5adc6',
+      showBack: isDetail || isCreate || isUserDetail || isCreateUser,
+      backLabel: (isUserDetail || isCreateUser) ? '← People' : '← Tickets',
+      backHandler: (isUserDetail || isCreateUser) ? this.goPeople : this.goList,
+      viewTitle: viewTitleMap[view],
+      goOverview: this.goOverview, goList: this.goList, goBoard: this.goBoard, goCreate: this.goCreate, goPeople: this.goPeople,
+
+      currentUser, role, canManageUsers, canCreateEpic, canDelete,
+      roleColor: rc.fg, roleBg: rc.bg,
+      currentUserInitials: initials(currentUser.name),
+      userMenuOpen: s.userMenuOpen,
+      toggleUserMenu: this.toggleUserMenu,
+      userSwitchOptions: s.users.map(u => ({ name: u.name, role: u.role, isActive: u.id === s.currentUserId, onClick: () => this.switchCurrentUser(u.id) })),
+
+      processedUsers,
+      goCreateUser: this.goCreateUser,
+      userDetail,
+      onUserNameChange: this.onUserNameChange,
+      onUserEmailChange: this.onUserEmailChange,
+      onUserDeptChange: this.onUserDeptChange,
+      onUserRoleChange: this.onUserRoleChange,
+      onSaveUser: this.onSaveUser,
+      userJustSaved: s.userJustSaved,
+      userSaveLabel: s.userJustSaved ? 'Saved ✓' : 'Save changes',
+      departments: DEPARTMENTS, roles: ROLES,
+
+      newUserForm: s.newUserForm,
+      onNewUserNameChange: this.onNewUserNameChange,
+      onNewUserEmailChange: this.onNewUserEmailChange,
+      onNewUserDeptChange: this.onNewUserDeptChange,
+      onNewUserRoleChange: this.onNewUserRoleChange,
+      onCreateUserSubmit: this.onCreateUserSubmit,
+
+      onDeleteTicket: this.onDeleteTicket,
+
+      openCount, criticalOpen, avgResolutionDays, createdThisWeek,
+      statusBreakdown, priorityBreakdown, recentActivity,
+
+      filters: s.filters,
+      onSearchChange: this.onSearchChange,
+      onStatusFilterChange: this.onStatusFilterChange,
+      onPriorityFilterChange: this.onPriorityFilterChange,
+      onAssigneeFilterChange: this.onAssigneeFilterChange,
+      onEnvFilterChange: this.onEnvFilterChange,
+      onEpicFilterChange: this.onEpicFilterChange,
+      onTypeFilterChange: this.onTypeFilterChange,
+      statusFilterOptions: ['All', ...STATUSES],
+      priorityFilterOptions: ['All', ...PRIORITIES],
+      assigneeFilterOptions: ['All', ...ASSIGNEES],
+      envFilterOptions: ['All', ...ENVS],
+      epicFilterOptions: ['All', ...EPICS],
+      filteredTickets,
+      noResults: filteredTickets.length === 0,
+      resultCountLabel: filteredTickets.length + ' of ' + s.tickets.length + ' tickets',
+      rowPadding: density === 'Compact' ? '8px 18px' : '13px 18px',
+      cardPadding: density === 'Compact' ? '8px' : '12px',
+
+      boardColumns, allowDrop: this.allowDrop,
+      boardSprint, onBoardSprintChange: this.onBoardSprintChange,
+      sprintFilterOptions: ['All', 'Backlog', ...SPRINTS],
+      boardType, onBoardTypeChange: this.onBoardTypeChange,
+      typeFilterOptions: ['All', ...TYPES],
+
+      companyName: COMPANY_NAME,
+      project: s.project,
+      projectInitial: s.project[0],
+      projectMenuOpen: s.projectMenuOpen,
+      toggleProjectMenu: this.toggleProjectMenu,
+      projectOptions: PROJECTS.map(p => ({
+        name: p,
+        isActive: p === s.project,
+        onClick: () => this.selectProject(p),
+      })),
+
+      ticket,
+      statuses: STATUSES, priorities: PRIORITIES, assignees: ASSIGNEES, severities: SEVERITIES, envs: ENVS, epics: EPICS, sizes: SIZES,
+      onDetailStatusChange: this.onDetailStatusChange,
+      onDetailPriorityChange: this.onDetailPriorityChange,
+      onDetailAssigneeChange: this.onDetailAssigneeChange,
+      onDetailEnvChange: this.onDetailEnvChange,
+      onDetailSizeChange: this.onDetailSizeChange,
+      onDetailStartDateChange: this.onDetailStartDateChange,
+      onDetailEndDateChange: this.onDetailEndDateChange,
+      onDetailSprintChange: this.onDetailSprintChange,
+      onDetailEpicChange: this.onDetailEpicChange,
+      onDetailStoryChange: this.onDetailStoryChange,
+      onSaveDetail: this.onSaveDetail,
+      isDirty,
+      justSaved: s.justSaved,
+      saveLabel: isDirty ? 'Save changes' : (s.justSaved ? 'Saved ✓' : 'Save changes'),
+      saveBg: isDirty ? '#4f46e5' : (s.justSaved ? '#dcfce7' : '#f1f5f9'),
+      saveColor: isDirty ? '#fff' : (s.justSaved ? '#15803d' : '#9ca3af'),
+      saveHoverBg: isDirty ? '#4338ca' : (s.justSaved ? '#dcfce7' : '#f1f5f9'),
+      newComment: s.newComment,
+      onNewCommentChange: this.onNewCommentChange,
+      onAddComment: this.onAddComment,
+
+      createForm: s.createForm,
+      createIsBug: s.createForm.type === 'Bug',
+      createIsStoryOrBug: s.createForm.type !== 'Epic',
+      typeOptions: TYPES.filter(ty => ty !== 'Epic' || canCreateEpic).map(ty => {
+        const active = s.createForm.type === ty;
+        const c = TYPE_COLORS[ty];
+        return { name: ty, onClick: () => this.onCreateTypeChange(ty), bg: active ? c.bg : '#fff', fg: active ? c.fg : '#9ca3af', border: active ? c.fg : '#e5e7eb' };
+      }),
+      createStoryOptions: [{ value: '', label: 'None' }, ...s.tickets.filter(t => t.type === 'Story' && t.epic === s.createForm.epic).map(st => ({ value: String(st.id), label: st.title }))],
+      onCreateStoryIdChange: this.onCreateStoryIdChange,
+      onCreateTitleChange: this.onCreateTitleChange,
+      onCreateDescChange: this.onCreateDescChange,
+      onCreatePriorityChange: this.onCreatePriorityChange,
+      onCreateSeverityChange: this.onCreateSeverityChange,
+      onCreateAssigneeChange: this.onCreateAssigneeChange,
+      onCreateEnvChange: this.onCreateEnvChange,
+      onCreateSizeChange: this.onCreateSizeChange,
+      onCreateStartDateChange: this.onCreateStartDateChange,
+      onCreateEndDateChange: this.onCreateEndDateChange,
+      onCreateSprintChange: this.onCreateSprintChange,
+      sprintOptions: ['Backlog', ...SPRINTS],
+      onCreateEpicChange: this.onCreateEpicChange,
+      onCreateStoryChange: this.onCreateStoryChange,
+      onCreateLabelsChange: this.onCreateLabelsChange,
+      onCreateSubmit: this.onCreateSubmit,
+    };
+  }
+}
+
+</script>
+</body>
+</html>
