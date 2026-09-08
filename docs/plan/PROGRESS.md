@@ -11,7 +11,7 @@
 |--------|--------|---------------------------|-----------|
 | M1 Scaffolding & infra | done | README.md, specs/09 (2026-07-15) | 2026-07-15 |
 | M2 Shared + data model + seed | done | specs/00 (2026-07-15) | 2026-07-28 |
-| M3 Users API + acting-as guard | pending | specs/07, 08, 00 (2026-07-15) | — |
+| M3 Users API + acting-as guard | done | specs/07, 08, 00 (2026-07-15) | 2026-09-08 |
 | M4 Projects API + key sequence | pending | specs/02 (2026-07-15) | — |
 | M5 Tickets write side | pending | specs/06, 05, 04, 00 (2026-07-15) | — |
 | M6 Tickets read side | pending | specs/03, 05, 04, 01 (2026-07-15) | — |
@@ -129,6 +129,75 @@
   first module that actually needs the DB injected into a controller/handler, so wiring it into
   Nest's DI container (a `DbModule` or similar) is fair game as part of M3's scope, not a gap
   left over from M2.
+
+### M3 — Users API + acting-as guard + role matrix (done, 2026-09-08)
+- **Files created**:
+  - `apps/api/src/db/db.module.ts` — `@Global()` `DbModule` exporting the `DB` symbol provider
+    that wraps M2's `createDb()`. This closes the item M2's handoff left open (the factory was
+    not yet in Nest DI).
+  - `apps/api/src/auth/permissions.ts` — `PERMISSIONS` map (`manageUsers`, `createEpic`,
+    `deleteTicket`), the spec 00 role matrix in one place. M5/M6 should hang their epic-create
+    and ticket-delete guards off `PERMISSIONS.createEpic` / `PERMISSIONS.deleteTicket` rather
+    than writing role literals.
+  - `apps/api/src/auth/acting-user.guard.ts` — resolves `X-Acting-User-Id` into
+    `req.actingUser`; exports `ACTING_USER_HEADER` and the `RequestWithActingUser` type.
+  - `apps/api/src/auth/roles.guard.ts` — enforces `@Roles(...)` against `req.actingUser`.
+  - `apps/api/src/auth/roles.decorator.ts`, `acting-user.decorator.ts` (`@ActingUser()` param
+    decorator — M5 needs it for the comment `author_id` rule, R6).
+  - `apps/api/src/auth/auth.module.ts` — registers both guards as `APP_GUARD`, in order.
+  - `apps/api/src/common/zod-validation.pipe.ts` — generic `ZodValidationPipe` over the shared
+    schemas; 400 with a `{path, message}[]` issue list. Reusable by every later module.
+  - `apps/api/src/users/` — `users.module.ts`, `users.controller.ts`, `user.mapper.ts`
+    (`toUser`, row → shared `User`; `createdAt` Date → ISO string), `is-unique-violation.ts`,
+    `queries/get-users.query.ts`, `queries/get-user.query.ts`,
+    `commands/create-user.command.ts`, `commands/update-user.command.ts`.
+  - Tests: `apps/api/src/auth/roles.guard.spec.ts` (15),
+    `apps/api/src/users/is-unique-violation.spec.ts` (4).
+  - `apps/api/vitest.config.ts`, `apps/api/tsconfig.build.json`.
+- **Files modified**: `apps/api/src/app.module.ts` (imports DbModule/AuthModule/UsersModule);
+  `apps/api/src/main.ts` (added `import 'dotenv/config'` — without it `DATABASE_URL` was never
+  loaded outside the seed script and `DbModule`'s factory throws at boot);
+  `apps/api/nest-cli.json` (points at `tsconfig.build.json`); `apps/api/package.json`
+  (added `@nestjs/cqrs@^10.2.8` — v11 requires Nest 11, we're on Nest 10 — and `zod`).
+- **Key decisions / deviations from PLAN.md**:
+  - **Guard split, and what returns what.** `ActingUserGuard` never rejects a *missing*
+    header — it sets `actingUser = null` and lets `RolesGuard` answer 403. That keeps
+    unguarded reads (`GET /users`) open per spec 07 while satisfying the acceptance criterion
+    (no header on `POST`/`PATCH` → 403). A header that is *present but unresolvable* (not a
+    UUID, or no such user) throws **401**, not 403 — a client bug should fail loudly rather
+    than look like a permission decision. This is a deliberate refinement of the acceptance
+    criterion's wording, not a miss.
+  - Both guards are global (`APP_GUARD`) and **order-sensitive** — Nest runs them in
+    registration order, so `ActingUserGuard` must stay listed first in `auth.module.ts`.
+  - `PERMISSIONS` was added beyond PLAN.md's file list so the matrix has a single home;
+    `roles.guard.spec.ts` restates the expected table independently of it, so an incorrect
+    edit to `PERMISSIONS` fails a test instead of silently redefining policy.
+  - No `DELETE /users` — spec 07 explicitly defers it (assignee/reporter cleanup is an
+    unmade decision).
+  - Empty `PATCH` body is a 200 no-op (Drizzle rejects `set({})`), not a 400.
+  - Duplicate email → 409. **Gotcha for every later module**: Drizzle wraps driver errors in
+    a `DrizzleQueryError` and puts the original on `.cause`, so the Postgres error code is
+    *not* on the top-level error. `isUniqueViolation()` walks the cause chain; reuse it (or
+    the same pattern) for M4's `key_prefix` unique constraint and M5's FK violations. This
+    was caught in live verification — the first implementation checked only `err.code` and
+    returned 500.
+- **Verification performed**:
+  - `pnpm exec turbo run build typecheck` — all three workspaces clean.
+  - `pnpm --filter @ticket-tracker/api run test` — 19 tests pass. The roles-guard spec covers
+    the full decision table: admin/manager/developer x {manageUsers, createEpic, deleteTicket},
+    plus no-acting-user, no-`@Roles`-metadata and empty-metadata cases.
+  - Live against the Compose Postgres + built API (`node dist/main.js`):
+    `GET /users` → 8 seeded users; `GET /users/:id` → 200; bad uuid → 400; unknown uuid → 404.
+    `POST`/`PATCH`: no header → 403, developer → 403, manager → 403, admin → 201/200.
+    Garbage header → 401; well-formed but unknown user id → 401. Invalid body → 400.
+    Duplicate email on both `POST` and `PATCH` → 409. Swagger `GET /api` → 200.
+    The `Test Newbie` user created during this pass was deleted afterwards; the DB is back to
+    the 8 seeded users + 1 project.
+- **Open items for next session**: none blocking. M4 (Projects API + key sequence) can start.
+  Two notes for it: (1) the `ZodValidationPipe` + `PERMISSIONS` + `@ActingUser()` plumbing is
+  in place, so M4 only adds its own module; (2) Docker was not running at the start of this
+  session and the Postgres container also took one spurious shutdown right after starting —
+  if queries 500 with `Failed query:`, check `docker compose ps` before debugging the code.
 
 ## Completion (Phase 5)
 <!-- Written once, when all modules are done. -->
