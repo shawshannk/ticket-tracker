@@ -18,7 +18,7 @@
 | M6a Read DTOs + list + detail | done | specs/03, 05 (2026-07-15) | 2026-09-08 |
 | M6b Board + overview | done | specs/04, 01 (2026-07-15) | 2026-09-08 |
 | M7 Frontend app shell | done | specs/02, 08 (2026-07-15) | 2026-09-08 |
-| M8 Overview dashboard view | pending | specs/01 (2026-07-15) | — |
+| M8 Overview dashboard view | done | specs/01 (2026-07-15) | 2026-09-08 |
 | M9 Tickets list view | pending | specs/03 (2026-07-15) | — |
 | M10 Board view | pending | specs/04 (2026-07-15) | — |
 | M11 Ticket detail view | pending | specs/05 (2026-07-15) | — |
@@ -626,6 +626,57 @@
   has everything it needs: `useOverview(projectId)` already exists in `api/queries.ts`, and the
   shared package exports the colour palettes (`STATUS_COLORS`, `PRIORITY_COLORS`) the prototype
   used. Replace the `Placeholder` in `overviewRoute`.
+
+### M8 — Overview Dashboard view (done, 2026-09-08)
+**First real screen.** The app now renders live project data.
+
+- **Files created**:
+  - `apps/web/src/features/overview/OverviewPage.tsx` — the whole view.
+  - **Shared primitives M9-M11 should reuse rather than re-create**:
+    - `components/Badge.tsx` — `StatusBadge` / `PriorityBadge` / `TypeBadge`, driven by the
+      shared colour palettes. `StatusBadge` falls back to a neutral pill for an unrecognised
+      status, since `status` is free text in the DB, not an enum.
+    - `components/relativeTime.ts` — `relativeTime` (Intl-based, no date library) + `formatDate`.
+    - `components/states.tsx` — `LoadingPanel` / `ErrorPanel` (with retry) / `EmptyState`.
+  - `components/relativeTime.spec.ts` (2 tests).
+- **Files modified**: `router.tsx` (overview route renders `OverviewPage` instead of the
+  placeholder); `apps/web/index.html` (favicon link — the browser's automatic `/favicon.ico`
+  request was the only console error on the page, and it's now clean).
+- **Key decisions**:
+  - **Status bars show only statuses with a count > 0**, falling back to the full zero-filled
+    set when the project has no tickets at all. The API always returns all 7 (M6b), which is
+    right for a stable shape but renders six empty bars on an active project. The empty-project
+    case still shows every status at 0%, as spec 01 asks.
+  - Recent-activity rows are `<Link>`s to the ticket detail route, so the list is navigable now
+    and needs nothing from M11 to work.
+  - The breadcrumb on those rows respects the R10 `showHierarchy` view pref from M7's store —
+    the first consumer of that store, proving the wiring works.
+  - Every figure is rendered straight from the API response; the view computes no statistic of
+    its own. `avgResolutionDays` displays as-is, so a project whose Done tickets were closed
+    within the same second correctly reads `0 days`.
+- **Verification performed**:
+  - `pnpm exec turbo run build typecheck test --force` — 8 tasks clean; 64 api + 11 web tests.
+  - **Driven in a real browser (Playwright + system Chrome)**:
+    - Populated project (Nimbus Triage): KPIs 7 open / 1 critical / 0 days / 8 this week;
+      six status bars with counts and percentages (25%, 12.5%…); four priority tiles
+      (1 critical, 2 high, 4 medium, 1 low); five recent-activity rows with keys, status
+      badges, `NIM-1 ▸ NIM-3` breadcrumbs, assignee names and relative times.
+    - **Empty project (Vega Mobile): all KPIs 0, every status row at 0%, and the recent-activity
+      empty state** ("No activity yet — create a ticket to get started") — spec 01's edge case.
+    - Clicking a recent-activity row navigates to `/projects/…/tickets/…`.
+    - **Invalidation acceptance criterion**: creating a ticket from the page moved "Open
+      tickets" 7 → 8. The probe ticket was deleted afterwards.
+    - **Console errors: none.**
+  - Screenshots reviewed (`m8-overview.png`, `m8-final.png`, `m8-empty.png`). One real bug
+    caught by looking at the pixels: the KPI suffix rendered as `0days` because JSX collapsed
+    a leading space — fixed with a margin. `innerText` cannot show this, so it would have
+    passed a text-only check.
+- **Open items for next session**: none blocking. **M9 (tickets list, size M)** is next. Notes:
+  (1) `useTickets(projectId, query)` exists; (2) parse URL search params with the shared
+  `ticketListQuerySchema` so the address bar and API agree (R7) — TanStack Router's
+  `validateSearch` takes it directly; (3) the `density` view pref (R10) is in the store,
+  unused so far — the list is where it applies; (4) reuse the badge/time/state components
+  above rather than restyling; (5) spec 03 wants the search input debounced ~300ms.
 
 ## Completion (Phase 5)
 <!-- Written once, when all modules are done. -->

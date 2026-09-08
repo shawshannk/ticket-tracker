@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter, Navigate, Outlet, useParams } from '@tanstack/react-router';
 import { api } from './api/endpoints';
 import { AppShell } from './layout/AppShell';
+import { OverviewPage } from './features/overview/OverviewPage';
 import { Placeholder } from './routes/Placeholder';
 
 /**
@@ -43,7 +44,7 @@ const overviewRoute = createRoute({
   path: 'overview',
   component: () => (
     <AppShell title="Overview">
-      <Placeholder view="Overview dashboard" module="M8" />
+      <OverviewPage />
     </AppShell>
   ),
 });
