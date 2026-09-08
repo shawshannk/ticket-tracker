@@ -2,6 +2,8 @@ import { createRootRoute, createRoute, createRouter, Navigate, Outlet, useParams
 import { api } from './api/endpoints';
 import { AppShell } from './layout/AppShell';
 import { OverviewPage } from './features/overview/OverviewPage';
+import { validateTicketSearch } from './features/tickets-list/searchParams';
+import { TicketsListPage } from './features/tickets-list/TicketsListPage';
 import { Placeholder } from './routes/Placeholder';
 
 /**
@@ -52,9 +54,11 @@ const overviewRoute = createRoute({
 const ticketsRoute = createRoute({
   getParentRoute: () => projectRoute,
   path: 'tickets',
+  // Filters live in the URL (R7), validated by the same shared schema the API enforces.
+  validateSearch: validateTicketSearch,
   component: () => (
     <AppShell title="Tickets">
-      <Placeholder view="Tickets list" module="M9" />
+      <TicketsListPage />
     </AppShell>
   ),
 });

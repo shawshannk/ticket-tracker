@@ -19,7 +19,7 @@
 | M6b Board + overview | done | specs/04, 01 (2026-07-15) | 2026-09-08 |
 | M7 Frontend app shell | done | specs/02, 08 (2026-07-15) | 2026-09-08 |
 | M8 Overview dashboard view | done | specs/01 (2026-07-15) | 2026-09-08 |
-| M9 Tickets list view | pending | specs/03 (2026-07-15) | — |
+| M9 Tickets list view | done | specs/03 (2026-07-15) | 2026-09-08 |
 | M10 Board view | pending | specs/04 (2026-07-15) | — |
 | M11 Ticket detail view | pending | specs/05 (2026-07-15) | — |
 | M12 Create ticket view | pending | specs/06 (2026-07-15) | — |
@@ -677,6 +677,63 @@
   `validateSearch` takes it directly; (3) the `density` view pref (R10) is in the store,
   unused so far — the list is where it applies; (4) reuse the badge/time/state components
   above rather than restyling; (5) spec 03 wants the search input debounced ~300ms.
+
+### M9 — Tickets List view (done, 2026-09-08)
+- **Files created** (`apps/web/src/features/tickets-list/`):
+  - `searchParams.ts` — **the URL contract, and the piece M10 should copy.** `validateTicketSearch`
+    (the route's `validateSearch`), `withDefaults`, `stripDefaults`, `withFilter`.
+  - `useDebounced.ts` — 300ms debounce (spec 03), reusable.
+  - `FilterBar.tsx` — six filter selects + the R10 density/hierarchy/tags toggles.
+  - `TicketsListPage.tsx` — TanStack Table grid, pager, empty state.
+  - `searchParams.spec.ts` (9 tests).
+- **Files modified**: `router.tsx` (list route gains `validateSearch`), `apps/web/package.json`.
+- **Key decisions**:
+  - **TanStack Table pinned to v8 (`^8.21.3`), deliberately, though v9.2.4 is `latest`.** v9 is a
+    ground-up rewrite (`useTable` + a `features`/`tableFeatures` model, `createCoreRowModel`,
+    stricter `ColumnDef` variance) that every published example and PLAN.md predate; four
+    typing probes failed to land a clean native v9 table for what is a fixed 8-column,
+    entirely server-driven grid. v9 ships a `/legacy` entry, but writing new code against a
+    shim is worse than pinning the stable major. **If someone upgrades, this file is the work.**
+  - **`validateSearch` returns the *stripped* search, not the defaulted one.** TanStack Router
+    writes whatever `validateSearch` returns back into the address bar, so returning the
+    defaulted object put `?page=1&pageSize=25&sortBy=createdAt&sortDir=desc` on every pristine
+    list — caught only by driving it in a browser, since the unit tests were happy either way.
+    The component calls `withDefaults(search)` to get the full query for the API. **M10's board
+    filters should follow this same split**, and `withDefaults` takes a loose
+    `Record<string, unknown>` on purpose: its input is the address bar, not a trusted object.
+  - Parsing uses the shared `ticketListQuerySchema` — the exact schema the API validates with —
+    and **falls back to defaults instead of throwing** on a hand-mangled or stale URL, so a bad
+    link renders a valid list rather than an error.
+  - Changing any filter resets to page 1; changing the page does not. Filters set to "All"
+    are removed from the URL rather than sent as a sentinel.
+  - Table is `manualPagination`/`manualSorting`/`manualFiltering` — the server already scoped
+    the page, and letting the table re-slice would silently paginate the page.
+  - The epic filter's options come from a second `useTickets(type: 'epic', pageSize: 100)`
+    call. Fine for a project's handful of epics; revisit if that stops being true.
+- **Verification performed**:
+  - `pnpm exec turbo run build typecheck test --force` — 8 tasks clean; 64 api + 20 web tests.
+  - **Driven in a real browser (Playwright + system Chrome)**: default list 8 rows with
+    "1–8 of 8 tickets"; `type=bug` → 3 rows and `?type=bug`; adding status → `?type=bug&status=Blocked`
+    → 1 row; **reloading that URL restored both rows and select values** (R7); typing "refund"
+    produced **one API call for six keystrokes** and 2 matching rows; a non-matching search
+    showed "No tickets match your filters."; `pageSize=2` paged 1–2 → 3–4 with the URL tracking;
+    the density toggle changed row height 77px → 65px and tags switched to neutral (R10);
+    clicking a row navigated to the ticket detail route. **Console errors: none.**
+  - Screenshots reviewed (`m9-list.png`, `m9-final.png`, `m9-compact.png`). Two things only the
+    pixels showed: the filter bar wrapped and orphaned the "Tags" toggle beside the count, so
+    search+count and filters+prefs are now separate rows; and the R10 prefs were confirmed to
+    actually change the rendering rather than just the store.
+- **Gotcha worth remembering**: after swapping react-table v9 → v8 the dev server threw
+  "Invalid hook call … more than one copy of React" from a stale Vite dep bundle. Fix is
+  `rm -rf apps/web/node_modules/.vite` and restart `pnpm run dev` — not a code problem. Expect
+  this after any dependency swap.
+- **Open items for next session**: none blocking. **M10 (board, size M)** is next. Notes:
+  (1) `useBoard(projectId, query)` and `useSprints(projectId)` exist; `boardQuerySchema` +
+  `BACKLOG_SPRINT` are in shared — mirror M9's `validateSearch`/`withDefaults` split;
+  (2) columns come from `STATUS_BY_TYPE[type]`, or `ALL_STATUSES` when the type filter is
+  "All" (spec 04); (3) `@dnd-kit/core` is not installed yet; (4) spec 04 wants a card to be
+  undraggable into a column invalid for its type rather than rejected after the drop, and
+  `useMoveTicketStatus` is ready for the optimistic update (R9).
 
 ## Completion (Phase 5)
 <!-- Written once, when all modules are done. -->
