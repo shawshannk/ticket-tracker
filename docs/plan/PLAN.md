@@ -55,15 +55,37 @@ specs win on conflict. Resolved conflicts: D-key (per-project keys) and R10 (vie
 - **Depends on**: M3
 
 ### M5: Tickets write side — commands + validation (L)
-- **Goal**: Create / Update / Delete / MoveStatus / AddComment as CQRS commands with all server-side rules.
-- **Source spec**: specs/06-create-ticket.md, specs/05-ticket-detail.md, specs/04-board-view.md (status move), specs/00 (constraints)
-- **Files**: `apps/api/src/tickets/commands/*` (CreateTicket, UpdateTicket, DeleteTicket, MoveTicketStatus, AddComment), controller routes `POST /projects/:projectId/tickets`, `PATCH /tickets/:id`, `PATCH /tickets/:id/status`, `DELETE /tickets/:id`, `POST /tickets/:id/comments`. Reporter auto-filled from acting user; comment author from acting user.
+> **Split into M5a / M5b on 2026-09-08** (was one L module; the skill calls for splitting L).
+> The acceptance criteria below are divided between the two halves, unchanged in substance.
+
+#### M5a: Ticket rules + CreateTicket (M)
+- **Goal**: The shared server-side rule layer, plus ticket creation end to end.
+- **Source spec**: specs/06-create-ticket.md, specs/00 (constraints, status by type)
+- **Files**: `apps/api/src/tickets/ticket-rules.ts` (status-by-type validation, default status,
+  epic/story consistency R5, type-dependent field nulling), `ticket.mapper.ts`,
+  `commands/create-ticket.command.ts`, `tickets.controller.ts` (route
+  `POST /projects/:projectId/tickets` only), `tickets.module.ts`.
 - **Acceptance criteria**:
   - Status-by-type validation rejects invalid status with 400 (unit tested per type).
   - Epic/story consistency constraint (R5) enforced and unit tested.
-  - Epic creation and delete are Admin/Manager-only (403 for Developer), tested.
-  - Comment `author_id` = acting user; create sets `reporter` = acting user's name.
+  - Epic creation is Admin/Manager-only (403 for Developer), tested.
+  - Create sets `reporter` = acting user's name and allocates the key via M4's
+    `TicketKeyService` inside the insert's transaction.
 - **Depends on**: M4
+
+#### M5b: Update / MoveStatus / Delete / AddComment (M)
+- **Goal**: The remaining four write commands, on top of M5a's rule layer.
+- **Source spec**: specs/05-ticket-detail.md, specs/04-board-view.md (status move), specs/00
+- **Files**: `apps/api/src/tickets/commands/*` (UpdateTicket, MoveTicketStatus, DeleteTicket,
+  AddComment), controller routes `PATCH /tickets/:id`, `PATCH /tickets/:id/status`,
+  `DELETE /tickets/:id`, `POST /tickets/:id/comments`.
+- **Acceptance criteria**:
+  - Status-by-type validation applies to both `PATCH /tickets/:id` and `PATCH /tickets/:id/status`.
+  - R5 re-checked on update when `epic_id` / `story_id` change.
+  - Delete is Admin/Manager-only (403 for Developer), tested.
+  - Comment `author_id` = acting user, taken server-side, never from the body.
+  - `updated_at` advances on every mutation, including status moves.
+- **Depends on**: M5a
 
 ### M6: Tickets read side — list / detail / board / overview (L)
 - **Goal**: All read queries with scoping, filtering, pagination, and computed overview stats.

@@ -13,7 +13,8 @@
 | M2 Shared + data model + seed | done | specs/00 (2026-07-15) | 2026-07-28 |
 | M3 Users API + acting-as guard | done | specs/07, 08, 00 (2026-07-15) | 2026-09-08 |
 | M4 Projects API + key sequence | done | specs/02 (2026-07-15) | 2026-09-08 |
-| M5 Tickets write side | pending | specs/06, 05, 04, 00 (2026-07-15) | — |
+| M5a Ticket rules + create | done | specs/06, 00 (2026-07-15) | 2026-09-08 |
+| M5b Update/move/delete/comment | pending | specs/05, 04, 00 (2026-07-15) | — |
 | M6 Tickets read side | pending | specs/03, 05, 04, 01 (2026-07-15) | — |
 | M7 Frontend app shell | pending | specs/02, 08 (2026-07-15) | — |
 | M8 Overview dashboard view | pending | specs/01 (2026-07-15) | — |
@@ -260,6 +261,75 @@
   transaction as the ticket insert. Reminder from M3 that still applies: `@ActingUser()` is
   ready for the reporter/comment-author rules (R6), and `PERMISSIONS.createEpic` /
   `PERMISSIONS.deleteTicket` are already defined for M5's guards.
+
+### M5a — Ticket rules + CreateTicket (done, 2026-09-08)
+> **PLAN.md changed this session**: M5 was sized L, so it was split into **M5a** (rule layer +
+> create) and **M5b** (update / move-status / delete / add-comment). The original acceptance
+> criteria were divided between the two, unchanged in substance. See PLAN.md's M5 section.
+
+- **Files created**:
+  - `apps/api/src/tickets/ticket-rules.ts` — **the rule layer M5b builds on.** Pure, DB-free
+    functions: `defaultStatusFor`, `isValidStatusFor`, `assertValidStatus` (R1),
+    `assertEpicStoryConsistency` (R5), `assertStoryLinkAllowed`. M5b's update and
+    move-status commands must call these rather than re-deriving the rules.
+  - `apps/api/src/tickets/ticket-links.ts` — `assertParentLinks(executor, {...})`, the
+    DB-touching half: an `epic_id`/`story_id` must exist, be the right type, live in the
+    **same project** (R2 — a cross-project link would breach tenancy), and satisfy R5. Takes a
+    `DbExecutor` so it runs inside the caller's transaction. M5b needs this whenever an update
+    changes either link.
+  - `apps/api/src/tickets/ticket.mapper.ts` (`toTicket`), `commands/create-ticket.command.ts`,
+    `tickets.controller.ts` (only `POST /projects/:projectId/tickets` so far — M5b adds the
+    rest of the routes to this same controller), `tickets.module.ts` (imports ProjectsModule
+    for `TicketKeyService`).
+  - Tests: `ticket-rules.spec.ts` (16 unit), `commands/create-ticket.int-spec.ts` (12 integration).
+- **Files modified**:
+  - `apps/api/src/auth/permissions.ts` — added `writeTicket: ['admin','manager','developer']`
+    (the matrix's "all three roles" row, used to require *a* recognized acting user on ticket
+    writes) and a `can(action, role)` helper for checks a route-level `@Roles` can't express.
+    `roles.guard.spec.ts` covers both (38 guard tests now).
+  - `apps/api/src/app.module.ts` — imports TicketsModule.
+- **Key decisions / deviations from PLAN.md**:
+  - **The epic-creation gate lives in the handler, not on the route.** It depends on the
+    request body's `type`, which route metadata can't see. The route carries
+    `@Roles(...PERMISSIONS.writeTicket)` (any recognized user — a missing header is still 403,
+    and the reporter has to come from somewhere), and the handler then calls
+    `can('createEpic', role)`. **M5b's delete is different** — it is unconditionally
+    Admin/Manager, so it *should* use a route-level `@Roles(...PERMISSIONS.deleteTicket)`.
+  - **Status is never client-supplied on create.** It's `defaultStatusFor(type)` — Planned for
+    epics, Backlog for stories/bugs. `ticketCreateSchema` has no `status` field, and Zod
+    strips unknown keys, so a payload carrying `status` is silently ignored rather than 400.
+    Verified: a create with `"status":"Done"` stored `Backlog`.
+  - **Type-dependent fields are nulled server-side** (severity is bug-only; env/size/dates/
+    sprint/epic/story are null on epics) even though the discriminated union already keeps
+    them off the payload — so the stored row can't drift from the type's shape.
+  - `reporter` = acting user's **name** (free text per spec 00, not an FK). This resolves the
+    open question spec 06 raised, the way PLAN.md had already decided.
+  - Create runs in **one transaction** wrapping link validation, key allocation and insert, so
+    a rejected insert doesn't burn a sequence number. There is an integration test for exactly
+    that; don't refactor the transaction away.
+- **Verification performed**:
+  - `pnpm exec turbo run build typecheck` — clean.
+  - `pnpm run test` — **58 unit tests** (16 ticket-rules incl. every type x every status in
+    both directions and the R5 table; 38 roles-guard/`can()`; 4 unique-violation).
+  - `pnpm run test:integration` — **15 tests**, of which 12 are new create tests: sequential
+    keys, reporter from acting user, per-type default status, epic field-nulling, severity
+    kept only for bugs, valid bug→story link, R5 violation rejected, cross-project link
+    rejected (R2), epic link pointing at a story rejected, unknown epic rejected, developer
+    forbidden from epics but allowed stories, and **a failed create leaving the sequence
+    untouched** (the next create takes the number it didn't consume).
+  - Live over HTTP: no header → 403; epic as developer → 403; epic as manager → 201 `NIM-1`
+    (status Planned, reporter "Aisha Patel"); story as developer → 201 `NIM-2` (Backlog);
+    bug linked to that story → 201 `NIM-3`; story missing `epicId` → 400 from Zod;
+    cross-project epic link → 400; R5 violation → 400; unknown project → 404.
+    All test tickets were deleted and `next_ticket_seq` reset to 1 afterwards — DB is back to
+    8 users / 3 projects / 0 tickets.
+- **Open items for next session**: none blocking. **M5b** adds `PATCH /tickets/:id`,
+  `PATCH /tickets/:id/status`, `DELETE /tickets/:id`, `POST /tickets/:id/comments` to the
+  existing `tickets.controller.ts`. Notes for it: (1) status changes go through
+  `assertValidStatus(storedTicket.type, newStatus)` — the type comes from the stored row, never
+  the request; (2) any update touching `epicId`/`storyId` must re-run `assertParentLinks`;
+  (3) `updated_at` must be set explicitly on every mutation (the column only defaults on
+  insert); (4) comment `author_id` comes from `@ActingUser()`, never the body (R6).
 
 ## Completion (Phase 5)
 <!-- Written once, when all modules are done. -->

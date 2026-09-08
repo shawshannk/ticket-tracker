@@ -10,6 +10,17 @@ export const PERMISSIONS = {
   manageProjects: ['admin'],
   createEpic: ['admin', 'manager'],
   deleteTicket: ['admin', 'manager'],
+  // The matrix's "all three roles" row — used to require *a* recognized acting user on
+  // ticket writes, where the reporter/comment author has to come from somewhere.
+  writeTicket: ['admin', 'manager', 'developer'],
 } as const satisfies Record<string, readonly UserRole[]>;
 
 export type GuardedAction = keyof typeof PERMISSIONS;
+
+/**
+ * Matrix lookup for checks that can't be a route-level `@Roles` — e.g. epic creation, which
+ * depends on the request body's `type` rather than the route (spec 06).
+ */
+export function can(action: GuardedAction, role: UserRole): boolean {
+  return (PERMISSIONS[action] as readonly UserRole[]).includes(role);
+}

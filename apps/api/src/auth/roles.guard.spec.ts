@@ -2,7 +2,7 @@ import { ForbiddenException, type ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { User, UserRole } from '@ticket-tracker/shared';
 import { describe, expect, it } from 'vitest';
-import { PERMISSIONS, type GuardedAction } from './permissions';
+import { can, PERMISSIONS, type GuardedAction } from './permissions';
 import { RolesGuard } from './roles.guard';
 
 function contextFor(required: readonly UserRole[] | undefined, role: UserRole | null): ExecutionContext {
@@ -49,6 +49,7 @@ const EXPECTED: Record<GuardedAction, Record<UserRole, boolean>> = {
   manageProjects: { admin: true, manager: false, developer: false },
   createEpic: { admin: true, manager: true, developer: false },
   deleteTicket: { admin: true, manager: true, developer: false },
+  writeTicket: { admin: true, manager: true, developer: true },
 };
 
 describe('RolesGuard decision table', () => {
@@ -78,4 +79,16 @@ describe('RolesGuard decision table', () => {
   it('treats empty @Roles metadata as unguarded', () => {
     expect(allows([], 'developer')).toBe(true);
   });
+});
+
+describe('can()', () => {
+  // Same table, exercised through the direct lookup used where a route-level @Roles can't
+  // reach — e.g. the epic-creation gate, which depends on the request body.
+  for (const [action, expectedByRole] of Object.entries(EXPECTED) as [GuardedAction, Record<UserRole, boolean>][]) {
+    for (const role of ROLES) {
+      it(`can('${action}', '${role}') is ${expectedByRole[role]}`, () => {
+        expect(can(action, role)).toBe(expectedByRole[role]);
+      });
+    }
+  }
 });
