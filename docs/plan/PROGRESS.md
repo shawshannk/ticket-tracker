@@ -10,7 +10,7 @@
 | Module | Status | Spec source (fingerprint) | Completed |
 |--------|--------|---------------------------|-----------|
 | M1 Scaffolding & infra | done | README.md, specs/09 (2026-07-15) | 2026-07-15 |
-| M2 Shared + data model + seed | pending | specs/00 (2026-07-15) | — |
+| M2 Shared + data model + seed | done | specs/00 (2026-07-15) | 2026-07-28 |
 | M3 Users API + acting-as guard | pending | specs/07, 08, 00 (2026-07-15) | — |
 | M4 Projects API + key sequence | pending | specs/02 (2026-07-15) | — |
 | M5 Tickets write side | pending | specs/06, 05, 04, 00 (2026-07-15) | — |
@@ -71,6 +71,64 @@
     only `postgres` is exercised for now.
 - **Open items for next session**: none. All M1 acceptance criteria verified; Postgres is up
   and ready for M2.
+
+### M2 — Shared package + data model + migrations + seed (done, 2026-07-28)
+- **Files created**:
+  - `packages/shared/src/enums.ts` — `USER_ROLES`, `TICKET_TYPES`, `TICKET_PRIORITIES`,
+    `TICKET_SEVERITIES`, `TICKET_ENVS`, `TICKET_SIZES`, `DEPARTMENTS` (all lowercase/canonical
+    per specs/00's DB enum definitions); `EPIC_STATUSES`/`STORY_STATUSES`/`BUG_STATUSES` +
+    `STATUS_BY_TYPE` (kept as the spec's exact Title Case strings, e.g. "In Progress", since
+    spec 00 defines status as free text, not a DB enum); color palettes (`ROLE_COLORS`,
+    `TYPE_COLORS`, `STATUS_COLORS`, `PRIORITY_COLORS`, `SEVERITY_COLORS`, `ENV_COLORS`,
+    `TAG_PALETTE`, `NEUTRAL_TAG`) pulled verbatim from the prototype's `<script type="text/x-dc">`
+    block in `reference/Ticket Dashboard.dc.html` (lines ~676-731).
+  - `packages/shared/src/schemas.ts` — Zod schemas for user/project create+update, and ticket
+    create (as a **discriminated union** on `type`, matching the exact
+    `baseTicketSchema`/`storyOrBugFields`/`bugOnlyFields` shape specs/06 specifies), ticket
+    update (flat partial — type can't change post-creation), move-status, add-comment.
+    **`reporter` is deliberately absent from `ticketCreateSchema`** — specs/06 and specs/05
+    both say it's auto-filled server-side from the acting user, not client-supplied.
+  - `packages/shared/src/types.ts` — `Project`/`User`/`Sprint`/`Ticket`/`Comment` entity
+    interfaces mirroring the Drizzle schema 1:1, plus DTO types inferred from the Zod schemas
+    via `z.infer`.
+  - `packages/shared/src/index.ts` — re-exports all three (was previously a placeholder export).
+  - `apps/api/src/db/schema/{projects,users,sprints,tickets,comments}.ts` + `index.ts` barrel —
+    Drizzle schema for all 5 tables. Used `pgEnum` (backed by shared's `as const` arrays) for
+    `role`/`type`/`priority`/`severity`/`env`/`size`; `status` is `text` (app-validated, not a
+    DB enum, per spec 00's explicit note that this must be type-dependent). Self-referencing FKs
+    on `tickets.epic_id`/`tickets.story_id` use Drizzle's `AnyPgColumn` callback pattern.
+  - `apps/api/src/db/index.ts` — `createDb(connectionString?)` factory using
+    `drizzle-orm/postgres-js`; not yet wired into Nest DI (deferred to M3, which is where the
+    first repo layer that needs it shows up).
+  - `apps/api/drizzle.config.ts` — reads `DATABASE_URL` via `dotenv/config`; migrations output
+    to `apps/api/drizzle/`.
+  - `apps/api/src/db/seed.ts` — inserts the 8 reference users (from the prototype's
+    `seedUsers()`) + "Nimbus Triage" project (`NIM`, seq 1); uses `onConflictDoNothing({ target })`
+    on `email` / `key_prefix` so re-running is idempotent (verified — see below).
+  - `apps/api/package.json` — added `db:generate` / `db:migrate` / `db:seed` scripts;
+    `drizzle-orm`, `postgres`, `dotenv` as deps, `drizzle-kit`, `tsx` as devDeps.
+  - `apps/api/.env` created from `.env.example` (gitignored, confirmed not tracked).
+  - Generated migration: `apps/api/drizzle/0000_worried_doctor_strange.sql`.
+- **Key decisions / deviations from PLAN.md**: none of substance. One addition beyond the
+  literal file list: `projectCreateSchema.keyPrefix` got a regex constraint
+  (`^[A-Z]+$`, 2-6 chars) since it's the ticket-key prefix M4 will consume — not spec-mandated
+  explicitly but a direct, low-risk consequence of the schema PLAN.md already calls for.
+- **Verification performed**:
+  - `pnpm --filter @ticket-tracker/shared run build` and `pnpm exec turbo run build typecheck`
+    (all three workspaces) — clean.
+  - `pnpm run db:generate` — produced the expected 5-table migration (confirmed FK/enum shape
+    matches spec 00 exactly).
+  - `pnpm run db:migrate` against the Compose Postgres — applied cleanly.
+  - `pnpm run db:seed` — inserted 8 users + 1 project; verified via `psql` that names/emails/
+    departments/roles and the project's `key_prefix`/`next_ticket_seq` match spec exactly.
+  - Re-ran `db:seed` a second time — row counts stayed at 8 users / 1 project (idempotent, no
+    duplicate-key errors).
+- **Open items for next session**: none blocking. Postgres is up and migrated; M3 (Users API +
+  acting-as guard) can start directly against this schema. Note for M3: `createDb()` in
+  `apps/api/src/db/index.ts` is a plain factory, not yet a Nest provider/module — M3 is the
+  first module that actually needs the DB injected into a controller/handler, so wiring it into
+  Nest's DI container (a `DbModule` or similar) is fair game as part of M3's scope, not a gap
+  left over from M2.
 
 ## Completion (Phase 5)
 <!-- Written once, when all modules are done. -->
