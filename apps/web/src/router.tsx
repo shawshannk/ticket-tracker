@@ -4,6 +4,9 @@ import { AppShell } from './layout/AppShell';
 import { BoardPage } from './features/board/BoardPage';
 import { validateBoardSearch } from './features/board/searchParams';
 import { CreateTicketPage } from './features/create-ticket/CreateTicketPage';
+import { CreateUserPage } from './features/people/CreateUserPage';
+import { PeoplePage } from './features/people/PeoplePage';
+import { UserDetailPage } from './features/people/UserDetailPage';
 import { OverviewPage } from './features/overview/OverviewPage';
 import { TicketDetailPage } from './features/ticket-detail/TicketDetailPage';
 import { validateTicketSearch } from './features/tickets-list/searchParams';
@@ -101,7 +104,27 @@ const peopleRoute = createRoute({
   path: 'people',
   component: () => (
     <AppShell title="People">
-      <Placeholder view="People & users" module="M13" />
+      <PeoplePage />
+    </AppShell>
+  ),
+});
+
+const createUserRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: 'people/new',
+  component: () => (
+    <AppShell title="Add team member">
+      <CreateUserPage />
+    </AppShell>
+  ),
+});
+
+const userDetailRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: 'people/$userId',
+  component: () => (
+    <AppShell title="Team member">
+      <UserDetailPage />
     </AppShell>
   ),
 });
@@ -115,6 +138,8 @@ const routeTree = rootRoute.addChildren([
     boardRoute,
     createTicketRoute,
     peopleRoute,
+    createUserRoute,
+    userDetailRoute,
   ]),
 ]);
 

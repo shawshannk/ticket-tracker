@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import type {
   BoardQuery,
   CommentCreateDto,
+  UserCreateDto,
+  UserUpdateDto,
   MoveTicketStatusDto,
   TicketCreateDto,
   TicketListQuery,
@@ -59,6 +61,31 @@ export const useTicket = (id: string) =>
 
 // --- Mutations ---
 // Each reads the acting user from the store itself, so no call site can forget to pass it.
+
+export function useCreateUser() {
+  const actingUserId = useActingUserId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UserCreateDto) => api.users.create(body, actingUserId),
+    // Users appear as assignees and comment authors across every view, so refresh broadly.
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.users }),
+  });
+}
+
+export function useUpdateUser() {
+  const actingUserId = useActingUserId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UserUpdateDto }) => api.users.update(id, body, actingUserId),
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.users });
+      qc.invalidateQueries({ queryKey: queryKeys.user(id) });
+    },
+  });
+}
+
+export const useUser = (id: string) =>
+  useQuery({ queryKey: queryKeys.user(id), queryFn: () => api.users.get(id), enabled: Boolean(id) });
 
 export function useCreateTicket(projectId: string) {
   const actingUserId = useActingUserId();

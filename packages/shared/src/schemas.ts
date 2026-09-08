@@ -20,8 +20,10 @@ export const ticketSizeSchema = z.enum(TICKET_SIZES);
 // --- Users ---
 
 export const userCreateSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
+  // As with the ticket schemas, these messages surface both in the API's 400 payload and
+  // inline in the People form, which validates with this same schema.
+  name: z.string().min(1, 'Name is required'),
+  email: z.string().email('Enter a valid email address'),
   department: departmentSchema,
   role: userRoleSchema,
 });

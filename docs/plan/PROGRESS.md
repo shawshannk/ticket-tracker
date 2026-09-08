@@ -23,7 +23,7 @@
 | M10 Board view | done | specs/04 (2026-07-15) | 2026-09-08 |
 | M11 Ticket detail view | done | specs/05 (2026-07-15) | 2026-09-08 |
 | M12 Create ticket view | done | specs/06 (2026-07-15) | 2026-09-08 |
-| M13 People & users views | pending | specs/07 (2026-07-15) | — |
+| M13 People & users views | done | specs/07 (2026-07-15) | 2026-09-08 |
 | M14 Testing & CI | pending | specs/09 (2026-07-15) | — |
 
 ## Handoff log
@@ -916,6 +916,69 @@
   shared — validate the form with them as M12 does; (5) after M13, only **M14 (testing
   hardening + Playwright e2e + GitHub Actions CI)** remains, which still owes the decision about
   running `test:integration` (and now the web suite) in CI with a live Postgres.
+
+### M13 — People & Users views (done, 2026-09-08)
+**Last feature module — every view in the plan now exists.** Only M14 (testing/CI) remains.
+
+- **Files created** (`apps/web/src/features/people/`):
+  - `PeoplePage.tsx` (list), `UserDetailPage.tsx` (Admin-editable + read-only summary),
+    `CreateUserPage.tsx`, `UserFields.tsx` (the four fields, shared by create and edit),
+    `userForm.ts` (`validate`, `changedFields`), `userForm.spec.ts` (7 tests).
+- **Files modified**:
+  - `api/queries.ts` — added `useUser`, `useCreateUser`, `useUpdateUser` (M12's handoff noted
+    these were missing; the endpoint functions already existed).
+  - `router.tsx` — `people/new` and `people/$userId` routes. **`people/new` is declared as a
+    static path so it wins over `people/$userId`**; a `new` id would otherwise be treated as a
+    user id.
+  - **`packages/shared/src/schemas.ts`** — human-readable messages on `userCreateSchema`
+    ("Name is required", "Enter a valid email address"). M12 did this for the ticket schemas
+    but not the user one, so the People form was still showing raw Zod text
+    ("String must contain at least 1 character(s)", "Invalid email"). **This improves the
+    API's 400 responses too.**
+- **Key decisions**:
+  - Admin-only is applied in three places, all of which matter: the "Add team member" button is
+    hidden, the detail's edit fields are replaced by the read-only summary, and
+    `/people/new` reached by URL shows an explanation rather than a form that would fail on
+    submit. **All three are UX — the server's guard is the control (R3, spec 08).**
+  - The detail view has a **dirty check** (Save disabled until something differs, "Saved ✓"
+    after), matching M11. Spec 07 notes the prototype always allowed Save; this is a
+    deliberate improvement, and the PATCH carries only changed fields.
+  - No delete anywhere — spec 07 explicitly defers it, because removing a user who is an
+    assignee/reporter needs a decision nobody has made. There is no `DELETE /users` endpoint
+    either (M3).
+  - Both forms validate with the shared user schemas, as M12's ticket form does.
+- **Verification performed**:
+  - `pnpm exec turbo run build typecheck test --force` — 8 tasks clean; 64 api + 56 web tests.
+  - **Driven in a real browser (Playwright + system Chrome)**:
+    - **As a Developer**: 8 users listed with role badges, no "Add team member", and a user's
+      detail page renders **zero edit inputs and no Save button** — just the summary.
+      Navigating directly to `/people/new` shows the Admin-only explanation.
+    - **As an Admin**: the button appears; editing Tom Whitfield's role sent
+      **`PATCH {"role":"manager"}`** (only the changed field), the button went to "Saved ✓" and
+      the role badge updated in place.
+    - Creating "Nina Reyes" navigated to her new detail page showing the right email,
+      department and role; a second create with the same email surfaced
+      **"A user with email nina.reyes@nimbus.io already exists"** (the API's 409).
+    - Validation messages re-checked after the schema fix: "Name is required" /
+      "Enter a valid email address". **No page errors.**
+    - Test data cleaned up: Nina Reyes deleted (via psql — there is no delete endpoint by
+      design) and Tom Whitfield restored to `developer`. DB back to 8 users / 8 tickets.
+  - Screenshots reviewed (`m13-people.png`, `m13-detail-dev.png`, `m13-created.png`,
+    `m13-validation.png`).
+- **Open items for next session**: none blocking. **M14 (testing hardening + CI) is the last
+  module.** What it inherits:
+  1. **The CI decision that has been outstanding since M4**: `pnpm test` (turbo) runs only the
+     unit suites — 64 api + 56 web. The **30 API integration tests need a live Postgres** and
+     run separately via `pnpm --filter @ticket-tracker/api run test:integration`. CI must stand
+     up a Postgres service, run migrations + seed, and run that suite too, or a third of the
+     backend coverage never runs.
+  2. Playwright e2e: there is **no Playwright dependency in the repo** — every browser check so
+     far was driven from a scratch directory against the system Chrome. M14 should add it
+     properly as a dev dependency with its own config.
+  3. `apps/api/Dockerfile` and `apps/web/Dockerfile` **do not exist**, though
+     `docker-compose.yml` references `build:` paths for both (noted since M1). Only the
+     `postgres` service is usable today.
+  4. Spec 09 is the source spec and has not been re-read since M1 — start there.
 
 ## Completion (Phase 5)
 <!-- Written once, when all modules are done. -->
