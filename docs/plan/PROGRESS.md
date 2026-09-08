@@ -14,7 +14,7 @@
 | M3 Users API + acting-as guard | done | specs/07, 08, 00 (2026-07-15) | 2026-09-08 |
 | M4 Projects API + key sequence | done | specs/02 (2026-07-15) | 2026-09-08 |
 | M5a Ticket rules + create | done | specs/06, 00 (2026-07-15) | 2026-09-08 |
-| M5b Update/move/delete/comment | pending | specs/05, 04, 00 (2026-07-15) | — |
+| M5b Update/move/delete/comment | done | specs/05, 04, 00 (2026-07-15) | 2026-09-08 |
 | M6 Tickets read side | pending | specs/03, 05, 04, 01 (2026-07-15) | — |
 | M7 Frontend app shell | pending | specs/02, 08 (2026-07-15) | — |
 | M8 Overview dashboard view | pending | specs/01 (2026-07-15) | — |
@@ -330,6 +330,71 @@
   the request; (2) any update touching `epicId`/`storyId` must re-run `assertParentLinks`;
   (3) `updated_at` must be set explicitly on every mutation (the column only defaults on
   insert); (4) comment `author_id` comes from `@ActingUser()`, never the body (R6).
+
+### M5b — Update / MoveStatus / Delete / AddComment (done, 2026-09-08)
+**M5 is now complete** — the whole ticket write side is in place.
+
+- **Files created**: `apps/api/src/tickets/commands/update-ticket.command.ts`,
+  `move-ticket-status.command.ts`, `delete-ticket.command.ts`, `add-comment.command.ts`,
+  and `commands/write-commands.int-spec.ts` (15 integration tests).
+- **Files modified**:
+  - `tickets.controller.ts` — added `PATCH /tickets/:id`, `PATCH /tickets/:id/status`,
+    `DELETE /tickets/:id` (204, no body), `POST /tickets/:id/comments`.
+  - `tickets.module.ts` — registers the four new handlers.
+  - `ticket-rules.ts` — added `assertFieldsAllowedForType` (see below). Also reworded the
+    three rule error messages to avoid the "a epic" article bug now that they surface to API
+    callers: they read `... for type "epic"` / `(ticket type: epic)`.
+  - `ticket-rules.spec.ts` — 6 more unit tests (22 in the file, 64 unit tests overall).
+- **Key decisions / deviations from PLAN.md**:
+  - **`assertFieldsAllowedForType` is new and not in PLAN.md's file list.** Create is protected
+    by the discriminated union, but `ticketUpdateSchema` is deliberately flat, so without this
+    check `PATCH /tickets/:id` was a back door to an epic with a severity or an env. Clearing
+    a field to null is always allowed; only *setting* a value is type-restricted. If M6+ ever
+    adds another write path, it needs this call too.
+  - **Delete semantics — decided with the user (2026-09-08), not spec'd anywhere.**
+    Deleting a ticket **cascades its comments** (owned by the ticket, meaningless without it)
+    but **refuses with 409 if any ticket still links to it** via `epic_id` *or* `story_id`, and
+    names the blocking keys in the message. Rejected alternatives: cascading to child tickets
+    (one click destroys real work) and nulling child links (silent orphans). Revisit only if
+    the user asks — it is a product decision, not an implementation detail.
+  - **Delete's role gate is route-level** `@Roles(...PERMISSIONS.deleteTicket)`, unlike M5a's
+    epic gate, because it doesn't depend on the body. `PATCH` and `POST /comments` carry
+    `writeTicket` (all three roles) per the spec 00 matrix row.
+  - Every rule is checked against the **stored** ticket's `type`, never anything in the
+    request — `type` is immutable after creation and `ticketUpdateSchema` has no `type` field.
+  - `updated_at` is set explicitly in all four commands (the column only defaults on insert).
+    **Adding a comment also bumps the ticket's `updated_at`**, so spec 01's "Recently updated"
+    reflects comment activity — worth knowing when M6 builds that query and M8 renders it.
+  - An empty `PATCH` body is a 200 no-op, consistent with `PATCH /users/:id` from M3.
+  - Each command runs in a transaction so its read-then-write (load ticket → validate →
+    update) can't interleave with a concurrent change.
+- **Verification performed**:
+  - `pnpm exec turbo run build typecheck` — clean.
+  - `pnpm run test` — **64 unit tests**. `pnpm run test:integration` — **30 tests**, 15 new:
+    update applies edits and advances `updated_at` while leaving `created_at`; status
+    validated against the stored type in both directions; R5 re-checked when either link moves
+    (and moving both together succeeds); type-inappropriate fields refused; empty body no-op;
+    404s. Move-status: valid move advances `updated_at`, epic-only status on a bug rejected
+    (the spec 04 drag case), and vice versa. Comments: `author_id` from the acting user and
+    verified in the stored row, ticket `updated_at` bumped. Delete: leaf ticket deleted with
+    its comments cascaded, parent with a child refused with the parent left intact then
+    deletable once the child is gone, a bug's story-link counted as a child, 404s.
+  - Live over HTTP: `PATCH` as developer → 200 (all roles may edit); epic → "Backlog" → 400;
+    severity on an epic → 400; no header → 403; unknown ticket → 404. Status move → 200 with
+    `updated_at` advanced; epic-only status → 400; empty status → 400 from Zod.
+    **Comment posted by a developer with `"authorId": <admin id>` in the body stored the
+    developer as author** — R6 holds against a hostile payload, not just an empty one.
+    `DELETE` as developer → 403; epic with a child → 409 naming `NIM-2`; story with comments
+    → 204; childless epic → 204. DB restored: 0 tickets, 0 comments, 8 users, 3 projects,
+    sequences reset.
+- **Open items for next session**: none blocking. **M6 (tickets read side, sized L)** is next
+  and is the last backend module. Notes for it: (1) `GET /tickets/:id` must return
+  `statusOptions` computed from `STATUS_BY_TYPE[ticket.type]` and `storyOptions` (stories under
+  the ticket's epic) per spec 05 — `ticket-rules.ts` already has the status half;
+  (2) every read must be project-scoped (R2) and paginated/filtered server-side (R8);
+  (3) `toTicket` / `toUser` / `toProject` mappers exist and should be reused;
+  (4) M6 is sized L — consider splitting it the way M5 was split, e.g. list+detail then
+  board+overview.
 
 ## Completion (Phase 5)
 <!-- Written once, when all modules are done. -->

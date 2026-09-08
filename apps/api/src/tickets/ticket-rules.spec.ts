@@ -3,6 +3,7 @@ import { BUG_STATUSES, EPIC_STATUSES, STORY_STATUSES, TICKET_TYPES, type TicketT
 import { describe, expect, it } from 'vitest';
 import {
   assertEpicStoryConsistency,
+  assertFieldsAllowedForType,
   assertStoryLinkAllowed,
   assertValidStatus,
   defaultStatusFor,
@@ -94,5 +95,49 @@ describe('story links are bug-only', () => {
     for (const type of TICKET_TYPES) {
       expect(() => assertStoryLinkAllowed(type, null)).not.toThrow();
     }
+  });
+});
+
+describe('type-appropriate fields on update', () => {
+  it('rejects a severity on an epic or a story', () => {
+    expect(() => assertFieldsAllowedForType('epic', { severity: '1' })).toThrow(BadRequestException);
+    expect(() => assertFieldsAllowedForType('story', { severity: '1' })).toThrow(BadRequestException);
+  });
+
+  it('allows a severity on a bug', () => {
+    expect(() => assertFieldsAllowedForType('bug', { severity: '1' })).not.toThrow();
+  });
+
+  it('rejects story/bug-only fields on an epic', () => {
+    for (const field of ['env', 'size', 'startDate', 'estimatedEndDate', 'sprintId', 'epicId']) {
+      expect(() => assertFieldsAllowedForType('epic', { [field]: 'x' })).toThrow(BadRequestException);
+    }
+  });
+
+  it('allows those fields on stories and bugs', () => {
+    const input = { env: 'staging', size: 'm', sprintId: EPIC, epicId: EPIC };
+    expect(() => assertFieldsAllowedForType('story', input)).not.toThrow();
+    expect(() => assertFieldsAllowedForType('bug', input)).not.toThrow();
+  });
+
+  it('always allows clearing a field to null, whatever the type', () => {
+    const cleared = {
+      severity: null,
+      env: null,
+      size: null,
+      startDate: null,
+      estimatedEndDate: null,
+      sprintId: null,
+      epicId: null,
+      storyId: null,
+    };
+    for (const type of TICKET_TYPES) {
+      expect(() => assertFieldsAllowedForType(type, cleared)).not.toThrow();
+    }
+  });
+
+  it('rejects a story link on a non-bug and ignores untouched fields', () => {
+    expect(() => assertFieldsAllowedForType('story', { storyId: STORY })).toThrow(BadRequestException);
+    expect(() => assertFieldsAllowedForType('epic', { title: 'ok', status: 'Done' })).not.toThrow();
   });
 });

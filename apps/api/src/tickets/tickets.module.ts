@@ -1,7 +1,11 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { ProjectsModule } from '../projects/projects.module';
+import { AddCommentHandler } from './commands/add-comment.command';
 import { CreateTicketHandler } from './commands/create-ticket.command';
+import { DeleteTicketHandler } from './commands/delete-ticket.command';
+import { MoveTicketStatusHandler } from './commands/move-ticket-status.command';
+import { UpdateTicketHandler } from './commands/update-ticket.command';
 import { TicketsController } from './tickets.controller';
 
 @Module({
@@ -9,6 +13,12 @@ import { TicketsController } from './tickets.controller';
   // the sequence, not to the tickets module.
   imports: [CqrsModule, ProjectsModule],
   controllers: [TicketsController],
-  providers: [CreateTicketHandler],
+  providers: [
+    CreateTicketHandler,
+    UpdateTicketHandler,
+    MoveTicketStatusHandler,
+    DeleteTicketHandler,
+    AddCommentHandler,
+  ],
 })
 export class TicketsModule {}

@@ -23,7 +23,7 @@ export function isValidStatusFor(type: TicketType, status: string): boolean {
 export function assertValidStatus(type: TicketType, status: string): void {
   if (!isValidStatusFor(type, status)) {
     throw new BadRequestException(
-      `"${status}" is not a valid status for a ${type} (allowed: ${STATUS_BY_TYPE[type].join(', ')})`,
+      `"${status}" is not a valid status for type "${type}" (allowed: ${STATUS_BY_TYPE[type].join(', ')})`,
     );
   }
 }
@@ -56,6 +56,35 @@ export function assertEpicStoryConsistency(
 /** Only Bugs carry a story link (spec 00: story_id is "Bug only"). */
 export function assertStoryLinkAllowed(type: TicketType, storyId: string | null | undefined): void {
   if (storyId && type !== 'bug') {
-    throw new BadRequestException(`Only a bug can link to a story (this ticket is a ${type})`);
+    throw new BadRequestException(`Only a bug can link to a story (ticket type: ${type})`);
   }
+}
+
+/**
+ * Fields that only exist on some ticket types (spec 00): severity is Bug-only, and the
+ * story/bug detail fields don't exist on an Epic. Create enforces this through the
+ * discriminated union; update has a flat schema, so it needs this check — otherwise
+ * `PATCH /tickets/:id` is a back door to an Epic with a severity.
+ *
+ * Clearing a field (explicit null) is always allowed; only setting a value is restricted.
+ */
+const STORY_BUG_ONLY_FIELDS = ['env', 'size', 'startDate', 'estimatedEndDate', 'sprintId', 'epicId'] as const;
+
+export function assertFieldsAllowedForType(
+  type: TicketType,
+  input: Partial<Record<string, unknown>>,
+): void {
+  if (input.severity != null && type !== 'bug') {
+    throw new BadRequestException(`Only a bug has a severity (ticket type: ${type})`);
+  }
+
+  if (type === 'epic') {
+    for (const field of STORY_BUG_ONLY_FIELDS) {
+      if (input[field] != null) {
+        throw new BadRequestException(`An epic has no ${field}`);
+      }
+    }
+  }
+
+  assertStoryLinkAllowed(type, input.storyId as string | null | undefined);
 }
