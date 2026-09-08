@@ -15,17 +15,22 @@ const SEED_USERS = [
   { name: 'Diego Ramirez', email: 'diego.ramirez@nimbus.io', department: 'SRE', role: 'developer' as const },
 ];
 
+// The prototype's three projects (reference/Ticket Dashboard.dc.html). All three are seeded
+// so multi-project scoping (R2) is actually exercisable rather than theoretical.
+const SEED_PROJECTS = [
+  { name: 'Nimbus Triage', keyPrefix: 'NIM', nextTicketSeq: 1 },
+  { name: 'Atlas Billing', keyPrefix: 'ATL', nextTicketSeq: 1 },
+  { name: 'Vega Mobile', keyPrefix: 'VEG', nextTicketSeq: 1 },
+];
+
 async function seed() {
   const db = createDb();
 
   await db.insert(users).values(SEED_USERS).onConflictDoNothing({ target: users.email });
 
-  await db
-    .insert(projects)
-    .values({ name: 'Nimbus Triage', keyPrefix: 'NIM', nextTicketSeq: 1 })
-    .onConflictDoNothing({ target: projects.keyPrefix });
+  await db.insert(projects).values(SEED_PROJECTS).onConflictDoNothing({ target: projects.keyPrefix });
 
-  console.log(`Seeded ${SEED_USERS.length} users and 1 project.`);
+  console.log(`Seeded ${SEED_USERS.length} users and ${SEED_PROJECTS.length} projects.`);
   process.exit(0);
 }
 

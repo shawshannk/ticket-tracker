@@ -7,6 +7,7 @@ import type { UserRole } from '@ticket-tracker/shared';
  */
 export const PERMISSIONS = {
   manageUsers: ['admin'],
+  manageProjects: ['admin'],
   createEpic: ['admin', 'manager'],
   deleteTicket: ['admin', 'manager'],
 } as const satisfies Record<string, readonly UserRole[]>;

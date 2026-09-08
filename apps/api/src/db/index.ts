@@ -11,3 +11,10 @@ export function createDb(connectionString: string | undefined = process.env.DATA
 }
 
 export type Db = ReturnType<typeof createDb>;
+
+/**
+ * Anything that can run a query: the pooled connection, or a transaction handle from
+ * `db.transaction(...)`. Lets helpers like TicketKeyService be called standalone or
+ * enlisted in a caller's transaction (M5 allocates a key inside the ticket insert's tx).
+ */
+export type DbExecutor = Db | Parameters<Parameters<Db['transaction']>[0]>[0];

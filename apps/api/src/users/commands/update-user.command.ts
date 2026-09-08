@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '../../db';
 import { DB } from '../../db/db.module';
 import { users } from '../../db/schema';
-import { isUniqueViolation } from '../is-unique-violation';
+import { isUniqueViolation } from '../../common/is-unique-violation';
 import { toUser } from '../user.mapper';
 
 export class UpdateUserCommand {

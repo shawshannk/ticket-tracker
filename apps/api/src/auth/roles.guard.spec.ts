@@ -46,6 +46,7 @@ const ROLES: UserRole[] = ['admin', 'manager', 'developer'];
 // PERMISSIONS so a wrong edit to that map fails a test instead of silently redefining policy.
 const EXPECTED: Record<GuardedAction, Record<UserRole, boolean>> = {
   manageUsers: { admin: true, manager: false, developer: false },
+  manageProjects: { admin: true, manager: false, developer: false },
   createEpic: { admin: true, manager: true, developer: false },
   deleteTicket: { admin: true, manager: true, developer: false },
 };

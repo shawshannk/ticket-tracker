@@ -12,7 +12,7 @@
 | M1 Scaffolding & infra | done | README.md, specs/09 (2026-07-15) | 2026-07-15 |
 | M2 Shared + data model + seed | done | specs/00 (2026-07-15) | 2026-07-28 |
 | M3 Users API + acting-as guard | done | specs/07, 08, 00 (2026-07-15) | 2026-09-08 |
-| M4 Projects API + key sequence | pending | specs/02 (2026-07-15) | — |
+| M4 Projects API + key sequence | done | specs/02 (2026-07-15) | 2026-09-08 |
 | M5 Tickets write side | pending | specs/06, 05, 04, 00 (2026-07-15) | — |
 | M6 Tickets read side | pending | specs/03, 05, 04, 01 (2026-07-15) | — |
 | M7 Frontend app shell | pending | specs/02, 08 (2026-07-15) | — |
@@ -198,6 +198,68 @@
   in place, so M4 only adds its own module; (2) Docker was not running at the start of this
   session and the Postgres container also took one spurious shutdown right after starting —
   if queries 500 with `Failed query:`, check `docker compose ps` before debugging the code.
+
+### M4 — Projects API + multi-project scoping + ticket-key sequence (done, 2026-09-08)
+- **Files created**:
+  - `apps/api/src/projects/ticket-key.service.ts` — `TicketKeyService.allocate(projectId, executor?)`
+    returning `{ key, seq, projectId }`. **This is the piece M5 needs.** It takes an optional
+    executor so the caller can allocate inside its own transaction (`db.transaction(tx => ...)`),
+    which is what spec 02 asks for: a failed ticket insert must roll the sequence back with it.
+  - `apps/api/src/projects/project.mapper.ts`, `projects.controller.ts`, `projects.module.ts`
+    (exports `TicketKeyService`), `queries/get-projects.query.ts`, `queries/get-project.query.ts`,
+    `commands/create-project.command.ts`.
+  - `apps/api/src/projects/ticket-key.service.int-spec.ts` — the race-safety integration test.
+  - `apps/api/vitest.integration.config.ts`.
+- **Files modified**:
+  - `apps/api/src/db/index.ts` — added the `DbExecutor` type (pooled connection *or* a
+    transaction handle); use it for any later helper that must join a caller's transaction.
+  - `apps/api/src/auth/permissions.ts` — added `manageProjects: ['admin']`;
+    `roles.guard.spec.ts` gained the matching row (19 guard tests now).
+  - **`is-unique-violation.ts` moved `src/users/` → `src/common/`** (now used by both users
+    and projects) — imports updated in three files. Its spec moved with it.
+  - `apps/api/src/db/seed.ts` — now seeds **all three** reference projects (Nimbus Triage/NIM,
+    Atlas Billing/ATL, Vega Mobile/VEG) instead of only Nimbus. Still idempotent on
+    `key_prefix`. Reason: R2 (real project data isolation) can't be verified with one project,
+    and M6–M10 will need a second project to prove list/board/overview scoping.
+  - `apps/api/src/app.module.ts` (imports ProjectsModule); `apps/api/tsconfig.build.json`
+    (excludes `*.int-spec.ts`); `apps/api/package.json` (added `test:integration`).
+- **Key decisions / deviations from PLAN.md**:
+  - **Key allocation is a single atomic `UPDATE ... RETURNING`**, not `SELECT ... FOR UPDATE`
+    followed by an update — spec 02 allows either; one statement is simpler and takes the row
+    lock for its whole duration. **Gotcha**: `RETURNING` yields *post*-update values, so the
+    sequence number the caller may use is `nextTicketSeq - 1`. Do not "fix" that subtraction.
+    Never split this into a read then a write.
+  - **Two test suites now.** `pnpm run test` is unit-only and needs no database;
+    `pnpm run test:integration` (`*.int-spec.ts`, `vitest.integration.config.ts`,
+    `fileParallelism: false`) needs the Compose Postgres up. Turbo's `test` task still runs
+    only the unit suite, so CI in M14 must decide explicitly whether to stand up Postgres and
+    run `test:integration` too — flagging it now so it isn't missed.
+  - `POST /projects` is in v1, Admin-only. Spec 02 left this as an open question; PLAN.md had
+    already resolved it as in-scope, so no new decision was needed here.
+  - No `PATCH`/`DELETE /projects` — neither spec 02 nor PLAN.md asks for them.
+  - Duplicate `key_prefix` → 409, via the shared `isUniqueViolation` (the cause-chain gotcha
+    from M3 applied exactly as predicted).
+- **Verification performed**:
+  - `pnpm exec turbo run build typecheck` — all three workspaces clean.
+  - `pnpm --filter @ticket-tracker/api run test` — 23 unit tests pass (19 roles-guard incl. the
+    new `manageProjects` row, 4 unique-violation).
+  - `pnpm --filter @ticket-tracker/api run test:integration` — 3 pass, including the acceptance
+    criterion: **50 concurrent `allocate()` calls on one project produced 50 distinct keys with
+    no duplicates and no gaps**, and left `next_ticket_seq` advanced by exactly 50. Also covers
+    first-key-is-`{PREFIX}-1` and unknown-project → NotFound.
+  - `pnpm run db:seed` re-run — 8 users, 3 projects, still idempotent.
+  - Live against the built API: `GET /projects` → the 3 seeded projects; `GET /projects/:id`
+    → 200; bad uuid → 400; unknown uuid → 404. `POST /projects`: no header → 403,
+    developer → 403, manager → 403, admin → 201; lowercase `keyPrefix` → 400 with the Zod
+    issue list; duplicate prefix → 409. Swagger `GET /api` → 200. Users endpoints
+    re-checked after the `is-unique-violation` move (list → 8, duplicate email → 409).
+    The `TMP` project created during verification was deleted; DB is back to 8 users /
+    3 projects, all with `next_ticket_seq = 1`.
+- **Open items for next session**: none blocking. M5 (tickets write side) can start and should
+  inject `TicketKeyService` from `ProjectsModule`, allocating the key inside the same
+  transaction as the ticket insert. Reminder from M3 that still applies: `@ActingUser()` is
+  ready for the reporter/comment-author rules (R6), and `PERMISSIONS.createEpic` /
+  `PERMISSIONS.deleteTicket` are already defined for M5's guards.
 
 ## Completion (Phase 5)
 <!-- Written once, when all modules are done. -->
