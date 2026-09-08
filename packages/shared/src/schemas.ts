@@ -135,3 +135,13 @@ export const ticketListQuerySchema = z.object({
   sortBy: z.enum(TICKET_SORT_FIELDS).default('createdAt'),
   sortDir: z.enum(['asc', 'desc']).default('desc'),
 });
+
+// --- Board query (GET /projects/:projectId/board) ---
+// spec 04: Sprint is "All" (omitted), "Backlog" (no sprint), or a specific sprint id.
+
+export const BACKLOG_SPRINT = 'backlog';
+
+export const boardQuerySchema = z.object({
+  sprint: z.union([z.literal(BACKLOG_SPRINT), z.string().uuid()]).optional(),
+  type: ticketTypeSchema.optional(),
+});

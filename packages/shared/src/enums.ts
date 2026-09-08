@@ -41,6 +41,21 @@ export type StoryStatus = (typeof STORY_STATUSES)[number];
 export type BugStatus = (typeof BUG_STATUSES)[number];
 export type TicketStatus = EpicStatus | StoryStatus | BugStatus;
 
+/**
+ * The union of every type's statuses, in the column order spec 04 gives for the board's
+ * Type = "All" view. Also the row order of the overview's status breakdown, so an empty
+ * project still renders every status at 0.
+ */
+export const ALL_STATUSES = [
+  'Backlog',
+  'Planned',
+  'In Progress',
+  'In Review',
+  'Blocked',
+  'On Hold',
+  'Done',
+] as const;
+
 export const STATUS_BY_TYPE: Record<TicketType, readonly string[]> = {
   epic: EPIC_STATUSES,
   story: STORY_STATUSES,

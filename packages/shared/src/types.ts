@@ -7,6 +7,7 @@ import {
   moveTicketStatusSchema,
   projectCreateSchema,
   storyCreateSchema,
+  boardQuerySchema,
   ticketCreateSchema,
   ticketListQuerySchema,
   ticketUpdateSchema,
@@ -86,6 +87,7 @@ export type TicketUpdateDto = z.infer<typeof ticketUpdateSchema>;
 export type MoveTicketStatusDto = z.infer<typeof moveTicketStatusSchema>;
 export type CommentCreateDto = z.infer<typeof commentCreateSchema>;
 export type TicketListQuery = z.infer<typeof ticketListQuerySchema>;
+export type BoardQuery = z.infer<typeof boardQuerySchema>;
 /** The raw, pre-default form — what a URL search-param parser starts from. */
 export type TicketListQueryInput = z.input<typeof ticketListQuerySchema>;
 
@@ -144,4 +146,30 @@ export interface Paged<T> {
   total: number;
   page: number;
   pageSize: number;
+}
+
+// --- Overview dashboard (spec 01) ---
+
+export interface StatusBreakdownEntry {
+  status: string;
+  count: number;
+  /** Share of the project's tickets, 0-100, rounded to 1 decimal. 0 for an empty project. */
+  pct: number;
+}
+
+export interface PriorityBreakdownEntry {
+  priority: TicketPriority;
+  count: number;
+}
+
+export interface OverviewStats {
+  openCount: number;
+  criticalOpen: number;
+  /** Rounded to 1 decimal; 0 when the project has no Done tickets yet. */
+  avgResolutionDays: number;
+  createdThisWeek: number;
+  statusBreakdown: StatusBreakdownEntry[];
+  priorityBreakdown: PriorityBreakdownEntry[];
+  /** The 5 most recently updated tickets, same shape as a list row. */
+  recentActivity: TicketSummary[];
 }

@@ -16,7 +16,7 @@
 | M5a Ticket rules + create | done | specs/06, 00 (2026-07-15) | 2026-09-08 |
 | M5b Update/move/delete/comment | done | specs/05, 04, 00 (2026-07-15) | 2026-09-08 |
 | M6a Read DTOs + list + detail | done | specs/03, 05 (2026-07-15) | 2026-09-08 |
-| M6b Board + overview | pending | specs/04, 01 (2026-07-15) | — |
+| M6b Board + overview | done | specs/04, 01 (2026-07-15) | 2026-09-08 |
 | M7 Frontend app shell | pending | specs/02, 08 (2026-07-15) | — |
 | M8 Overview dashboard view | pending | specs/01 (2026-07-15) | — |
 | M9 Tickets list view | pending | specs/03 (2026-07-15) | — |
@@ -472,6 +472,88 @@
   `OverviewStats` to shared; (5) the sprints table is still empty and has no API — M6b may
   need a minimal `GET /projects/:projectId/sprints` for the board's Sprint filter, which
   PLAN.md doesn't list anywhere; flag it when M6b starts.
+
+### M6b — Board + overview stats (done, 2026-09-08)
+**M6 is complete, and with it the entire backend (M1–M6).** Everything from here is frontend.
+
+- **Files created**:
+  - `apps/api/src/tickets/queries/get-board.query.ts` — `GET /projects/:projectId/board`.
+  - `apps/api/src/tickets/queries/get-overview-stats.query.ts` — `GET /projects/:projectId/overview`.
+  - `apps/api/src/projects/queries/get-sprints.query.ts` — `GET /projects/:id/sprints` (see
+    scope addition below).
+  - `apps/api/src/tickets/queries/board-overview.int-spec.ts` — 12 integration tests.
+- **Files modified**:
+  - `packages/shared/src/enums.ts` — added **`ALL_STATUSES`**, the union of every type's
+    statuses in spec 04's Type="All" column order. It is both the board's column order (M10)
+    and the overview's status-breakdown row order; use it rather than re-deriving a union.
+  - `packages/shared/src/types.ts` — `OverviewStats`, `StatusBreakdownEntry`,
+    `PriorityBreakdownEntry`, `BoardQuery`.
+  - `packages/shared/src/schemas.ts` — `boardQuerySchema` + the `BACKLOG_SPRINT` constant
+    (`'backlog'`). M10's URL search params should parse with this schema.
+  - `tickets.controller.ts` / `tickets.module.ts`, `projects.controller.ts` /
+    `projects.module.ts` — the three routes and handlers.
+  - `apps/api/src/db/seed.ts` — seeds 3 sprints per project (9 total). Idempotent by
+    `(project, name)`: re-running reports `0 new` rather than duplicating.
+- **Scope addition (agreed with user, recorded in PLAN.md)**: spec 04's board has a Sprint
+  filter, but **no module in the original plan ever created or listed sprints** and the table
+  was empty, so the filter was unusable end to end. M6b adds a read-only
+  `GET /projects/:projectId/sprints` plus seed data. Sprint *management* (create/edit) stays
+  out of scope — no spec describes such a UI. If M10 needs users to create sprints, that is a
+  new decision, not an oversight.
+- **Key decisions / deviations from PLAN.md**:
+  - **Board returns a flat `TicketSummary[]`, not grouped, and is not paginated.** Grouping is
+    presentation (spec 04 says so explicitly), and which columns exist depends on the type
+    filter, which the client derives from `STATUS_BY_TYPE` / `ALL_STATUSES`. A board shows
+    every card in its filter by definition, so paging it would be wrong.
+  - `sprint` accepts `'backlog'` (→ `sprint_id IS NULL`) or a sprint uuid; omitted = All.
+    Anything else is a 400 from the shared schema.
+  - **The overview is two round trips, not literally one query** — a deliberate reading of the
+    acceptance criterion. One statement (CTEs + `FILTER` + `jsonb_object_agg`) produces every
+    scalar and both breakdowns; a second reuses M6a's `summarySelect` for the 5
+    recent-activity rows. Folding those joins into the same statement would mean
+    re-implementing the summary join and mapper in raw SQL and letting recent-activity rows
+    drift from list rows. **The thing the criterion actually protects against — shipping the
+    ticket list to the client and totalling it up — does not happen anywhere.**
+  - Breakdowns always emit **every** status (7) and **every** priority (4), zero-filled, so
+    dashboard rows don't appear and vanish as a project fills up. `pct` is 0 when the project
+    has no tickets — the divide-by-zero guard is in both SQL (`coalesce`) and TS.
+  - `avgResolutionDays` is `avg(updated_at - created_at)` over Done tickets in **days, rounded
+    to 1 decimal**. Note this uses `updated_at`, per spec 00's definition — so *any* later edit
+    to a Done ticket inflates its apparent resolution time. That is what the spec asks for;
+    flagging it because it is a genuine modelling weakness someone may want revisited (a real
+    `resolved_at` column would be the fix).
+  - `db.execute()` return shape differs by driver (postgres-js returns the array directly,
+    node-postgres wraps it in `.rows`); the handler handles both, so swapping drivers later
+    won't silently break the dashboard.
+- **Verification performed**:
+  - `pnpm exec turbo run build typecheck` — all six tasks clean.
+  - `pnpm run test` — 64 unit. `pnpm run test:integration` — **55 tests**, 12 new: sprints
+    listed in start-date order and project-scoped; board flat/summary-shaped, **R2 isolation**,
+    filter by specific sprint, by `backlog`, by type, and sprint+type combined, plus schema
+    rejection of a bad sprint value; overview KPIs against spec 00's definitions (a Done
+    ticket backdated 2026-06-01 → 06-04 yields `avgResolutionDays === 3`), breakdowns with
+    percentages and zero-filled rows, recent-activity ordering and shape, **the empty project
+    returning zeros with no NaN**, and **R2: another project's tickets never counted**.
+  - `pnpm run db:seed` run twice — `9 sprints (9 new)` then `(0 new)`, confirming idempotency.
+  - Live over HTTP: sprints listed for NIM; board all/by-sprint/backlog/type+backlog, bad
+    sprint → 400, ATL isolated; overview KPIs, breakdown percentages summing over 7 status
+    rows, recent activity carrying epic refs; **empty project VEG → all zeros, 7 status rows,
+    every pct 0**; Swagger 200. Tickets deleted and sequences reset afterwards; the 9 seeded
+    sprints were intentionally left in place. DB: 0 tickets, 9 sprints, 8 users, 3 projects.
+  - One live figure worth not misreading: `avgResolutionDays=0` in the HTTP pass is correct —
+    that ticket was created and marked Done within the same second. The 3-day case is covered
+    by the integration test.
+- **Open items for next session**: none blocking. **M7 (frontend app shell)** is next and
+  starts the frontend half: routing, layout, API client, acting-as switcher, project switcher.
+  Notes: (1) `apps/web` is still the M1 Vite/React/Tailwind shell — no router, no TanStack
+  Query, no API client yet; (2) the API client must attach `X-Acting-User-Id` on mutations in
+  **one** place (spec 08) — reads need no header; (3) SPEC.md's contract says the frontend
+  generates its typed client / hooks from the OpenAPI spec at `GET /api` rather than
+  hand-writing types — decide in M7 whether to honour that or import the shared DTOs directly,
+  and record the choice; (4) every URL-driven view should parse its search params with the
+  shared schemas (`ticketListQuerySchema`, `boardQuerySchema`) so the address bar and the API
+  agree (R7); (5) `pnpm run test:integration` needs Postgres up — M14's CI decision is still
+  outstanding.
 
 ## Completion (Phase 5)
 <!-- Written once, when all modules are done. -->

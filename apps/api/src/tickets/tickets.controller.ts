@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPi
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
+  boardQuerySchema,
   commentCreateSchema,
   moveTicketStatusSchema,
   ticketCreateSchema,
@@ -9,7 +10,9 @@ import {
   ticketUpdateSchema,
   type Comment,
   type CommentCreateDto,
+  type BoardQuery,
   type MoveTicketStatusDto,
+  type OverviewStats,
   type Paged,
   type Ticket,
   type TicketCreateDto,
@@ -31,6 +34,8 @@ import { MoveTicketStatusCommand } from './commands/move-ticket-status.command';
 import { UpdateTicketCommand } from './commands/update-ticket.command';
 import { GetTicketDetailQuery } from './queries/get-ticket-detail.query';
 import { GetTicketsQuery } from './queries/get-tickets.query';
+import { GetBoardQuery } from './queries/get-board.query';
+import { GetOverviewStatsQuery } from './queries/get-overview-stats.query';
 
 @ApiTags('tickets')
 @Controller()
@@ -48,6 +53,22 @@ export class TicketsController {
     @Query(new ZodValidationPipe(ticketListQuerySchema)) query: TicketListQuery,
   ): Promise<Paged<TicketSummary>> {
     return this.queryBus.execute(new GetTicketsQuery(projectId, query));
+  }
+
+  /** Flat list; the frontend groups into columns (spec 04). Not paginated by design. */
+  @Get('projects/:projectId/board')
+  @ApiOperation({ summary: "A project's board tickets, filtered by sprint and type" })
+  board(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Query(new ZodValidationPipe(boardQuerySchema)) query: BoardQuery,
+  ): Promise<TicketSummary[]> {
+    return this.queryBus.execute(new GetBoardQuery(projectId, query));
+  }
+
+  @Get('projects/:projectId/overview')
+  @ApiOperation({ summary: 'Overview dashboard stats, computed in the database' })
+  overview(@Param('projectId', ParseUUIDPipe) projectId: string): Promise<OverviewStats> {
+    return this.queryBus.execute(new GetOverviewStatsQuery(projectId));
   }
 
   @Get('tickets/:id')

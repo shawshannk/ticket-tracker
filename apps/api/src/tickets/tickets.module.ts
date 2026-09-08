@@ -8,6 +8,8 @@ import { MoveTicketStatusHandler } from './commands/move-ticket-status.command';
 import { UpdateTicketHandler } from './commands/update-ticket.command';
 import { GetTicketDetailHandler } from './queries/get-ticket-detail.query';
 import { GetTicketsHandler } from './queries/get-tickets.query';
+import { GetBoardHandler } from './queries/get-board.query';
+import { GetOverviewStatsHandler } from './queries/get-overview-stats.query';
 import { TicketsController } from './tickets.controller';
 
 @Module({
@@ -23,6 +25,8 @@ import { TicketsController } from './tickets.controller';
     AddCommentHandler,
     GetTicketsHandler,
     GetTicketDetailHandler,
+    GetBoardHandler,
+    GetOverviewStatsHandler,
   ],
 })
 export class TicketsModule {}

@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { createDb } from './index';
-import { projects, users } from './schema';
+import { projects, sprints, users } from './schema';
 
 // Values from the prototype's seedUsers() / DEPARTMENTS (reference/Ticket Dashboard.dc.html),
 // with roles lowercased to match the shared UserRole enum.
@@ -23,6 +23,14 @@ const SEED_PROJECTS = [
   { name: 'Vega Mobile', keyPrefix: 'VEG', nextTicketSeq: 1 },
 ];
 
+// Sprints per project — added in M6b so the board's Sprint filter (spec 04) has real options.
+// Dates are fixed rather than relative so re-seeding is deterministic.
+const SEED_SPRINTS = [
+  { name: 'Sprint 24', startsOn: '2026-06-15', endsOn: '2026-06-26' },
+  { name: 'Sprint 25', startsOn: '2026-06-29', endsOn: '2026-07-10' },
+  { name: 'Sprint 26', startsOn: '2026-07-13', endsOn: '2026-07-24' },
+];
+
 async function seed() {
   const db = createDb();
 
@@ -30,7 +38,22 @@ async function seed() {
 
   await db.insert(projects).values(SEED_PROJECTS).onConflictDoNothing({ target: projects.keyPrefix });
 
-  console.log(`Seeded ${SEED_USERS.length} users and ${SEED_PROJECTS.length} projects.`);
+  // Every project gets the same sprint names; idempotent because an existing (project, name)
+  // pair is skipped rather than duplicated on a re-run.
+  const allProjects = await db.select().from(projects);
+  const existing = await db.select().from(sprints);
+  const seen = new Set(existing.map((s) => `${s.projectId}:${s.name}`));
+  const toInsert = allProjects.flatMap((project) =>
+    SEED_SPRINTS.filter((s) => !seen.has(`${project.id}:${s.name}`)).map((s) => ({ ...s, projectId: project.id })),
+  );
+  if (toInsert.length > 0) {
+    await db.insert(sprints).values(toInsert);
+  }
+
+  console.log(
+    `Seeded ${SEED_USERS.length} users, ${SEED_PROJECTS.length} projects, ` +
+      `${allProjects.length * SEED_SPRINTS.length} sprints (${toInsert.length} new).`,
+  );
   process.exit(0);
 }
 

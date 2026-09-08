@@ -113,6 +113,10 @@ specs win on conflict. Resolved conflicts: D-key (per-project keys) and R10 (vie
 - **Files**: `packages/shared` `OverviewStats`; `queries/get-board.query.ts`,
   `queries/get-overview-stats.query.ts`; routes `GET /projects/:projectId/board`,
   `GET /projects/:projectId/overview`.
+- **Scope addition (agreed with user 2026-09-08)**: spec 04's board Sprint filter needs sprints
+  to exist, but no module in this plan ever created or listed them and the table is empty.
+  M6b therefore also adds `GET /projects/:projectId/sprints` (read-only) and seeds 2-3 sprints
+  per project. Sprint *management* (create/edit) stays out of scope — no spec describes it.
 - **Acceptance criteria**:
   - Board honors sprint/type filters and returns `TicketSummary[]` flat (grouping is client-side).
   - Overview computed in one query; empty-project edge cases return 0 / 0.0 without divide-by-zero.
