@@ -1053,5 +1053,64 @@
     matching spec 09, which only asks for migrations to be automated.
 
 ## Completion (Phase 5)
-<!-- Written once, when all modules are done. -->
-_Pending._
+
+**All 16 modules complete, 2026-09-08.** M5 and M6 were each split in two mid-build (M5a/M5b,
+M6a/M6b), recorded in PLAN.md at the time.
+
+### What was built
+A full-stack multi-project ticket tracker, replacing a static prototype:
+- **`packages/shared`** — enums, Zod schemas, DTOs and the role matrix, consumed by both sides
+  so validation and permissions cannot drift. Dual CJS/ESM.
+- **`apps/api`** — NestJS + CQRS + Drizzle. 15 routes across users, projects, sprints and
+  tickets, with the server-side rules the prototype lacked: status validated per ticket type,
+  epic/story consistency, race-safe per-project ticket keys, and the role matrix in guards.
+- **`apps/web`** — React + TanStack Router/Query/Table + Zustand + dnd-kit. Overview, list,
+  board, ticket detail, create, and people views, with filters in the URL.
+- **Infra** — Docker Compose (postgres + migrate + api + web), and CI running typecheck, lint,
+  unit, integration, build, e2e and image builds.
+
+### Coverage at completion
+| Suite | Count | Needs a database |
+|---|---|---|
+| API unit (`pnpm run test`) | 64 | no |
+| Web unit (`pnpm run test`) | 56 | no |
+| API integration (`pnpm run test:integration`) | 55 | **yes** |
+| Playwright e2e (`pnpm run test:e2e`) | 5 specs | **yes**, plus running apps |
+
+### How the requirements landed
+Every R from SPEC.md is implemented and tested: R1 status-by-type and R2 project isolation are
+covered in unit, integration *and* e2e (spec 09 named them the two riskiest); R3 role matrix,
+R4 race-safe keys, R5 epic/story consistency, R6 comment authorship, R7 URL-driven filters,
+R8 server-side pagination, R9 optimistic board moves with rollback, and R10 client view prefs.
+
+### Deviations from SPEC.md worth knowing
+1. **The frontend imports shared DTOs instead of generating a client from OpenAPI** (decided
+   with the user in M7). The API builds its responses from the same types, so they cannot
+   drift, and codegen would only restate them.
+2. **`GET /projects/:id/sprints` and seeded sprints were added in M6b** — spec 04's board Sprint
+   filter needed sprints, but no module in the original plan ever created or listed them.
+3. **Ticket delete cascades comments but refuses while child tickets link to it** (409) —
+   decided with the user in M5b; no spec covered it.
+4. **`avgResolutionDays` uses `updated_at`** because spec 00 defines it that way, so any later
+   edit to a Done ticket inflates it. A real `resolved_at` column would be the fix.
+
+### Backlog triage
+- *Full ~20-row prototype seed dataset* — **not needed.** The 8 users / 3 projects / 9 sprints
+  seed plus the demo tickets created during verification proved sufficient throughout.
+- *User deletion strategy* — **still open, deliberately.** Spec 07 defers it and there is no
+  `DELETE /users` endpoint. Needs a product decision (soft-delete / reassign / block) before
+  anyone builds it.
+- *Per-project team membership (`project_members`)* — **still open**, additive whenever wanted.
+- *Sprint CRUD UI* — **partially closed.** Sprints are readable and seeded (M6b); management UI
+  remains unspec'd.
+- *New:* no deployment target — CI stops at "build succeeds and tests pass" per spec 09.
+- *New:* `docker compose` seeding is manual (`docker compose run --rm migrate pnpm run db:seed`).
+
+### Running it
+```bash
+docker compose up -d --build                                   # whole stack
+docker compose run --rm migrate pnpm run db:seed               # first-run demo data
+# or, for development:
+docker compose up -d postgres && pnpm install && pnpm run dev  # api :3000, web :5173
+```
+
