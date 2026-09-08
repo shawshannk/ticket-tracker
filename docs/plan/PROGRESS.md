@@ -17,7 +17,7 @@
 | M5b Update/move/delete/comment | done | specs/05, 04, 00 (2026-07-15) | 2026-09-08 |
 | M6a Read DTOs + list + detail | done | specs/03, 05 (2026-07-15) | 2026-09-08 |
 | M6b Board + overview | done | specs/04, 01 (2026-07-15) | 2026-09-08 |
-| M7 Frontend app shell | pending | specs/02, 08 (2026-07-15) | — |
+| M7 Frontend app shell | done | specs/02, 08 (2026-07-15) | 2026-09-08 |
 | M8 Overview dashboard view | pending | specs/01 (2026-07-15) | — |
 | M9 Tickets list view | pending | specs/03 (2026-07-15) | — |
 | M10 Board view | pending | specs/04 (2026-07-15) | — |
@@ -554,6 +554,78 @@
   shared schemas (`ticketListQuerySchema`, `boardQuerySchema`) so the address bar and the API
   agree (R7); (5) `pnpm run test:integration` needs Postgres up — M14's CI decision is still
   outstanding.
+
+### M7 — Frontend app shell (done, 2026-09-08)
+**First frontend module.** Everything M8–M13 renders mounts into this shell.
+
+- **Files created** (all under `apps/web/src/`):
+  - `api/client.ts` — `apiFetch`, `ApiError`, `ACTING_USER_HEADER`. **The one place the acting
+    user header is attached.** Also drops empty query params (so "All" filters leave the URL),
+    handles the 204 from DELETE, and surfaces the API's Zod `issues` array on a 400.
+  - `api/endpoints.ts` — one function per route, typed with the shared DTOs. Views never call
+    `apiFetch` directly.
+  - `api/queries.ts` — `queryKeys` + TanStack Query hooks. **Mutation hooks read the acting
+    user from the store themselves**, so no call site can forget to pass it.
+  - `store/actingUser.ts`, `store/viewPrefs.ts` — Zustand, both `persist`ed to localStorage.
+  - `layout/` — `AppShell`, `Sidebar`, `ProjectSwitcher`, `ActingUserMenu`, `useDismissable`.
+  - `router.tsx`, `routes/Placeholder.tsx`, `api/client.spec.ts` (9 tests).
+- **Files modified**: `main.tsx` (Query + Router providers; `App.tsx` deleted), `index.css`
+  and `tailwind.config.js` (IBM Plex, prototype scrollbars), `apps/api/src/main.ts` +
+  `.env`/`.env.example` (CORS — see below), `packages/shared/package.json` +
+  `tsconfig.esm.json` (dual build — see below).
+- **Decision recorded (asked and answered by the user, 2026-09-08): API types come from
+  `@ticket-tracker/shared`, not an OpenAPI codegen step.** This is a **deliberate deviation
+  from SPEC.md's cross-module contract**, which says the frontend generates a typed client from
+  the OpenAPI spec. Rationale: the API builds its responses from these exact shared types, so
+  the two cannot drift, and a generated client would only restate them while adding a codegen
+  step that needs the API running. If drift ever appears, revisit this first.
+- **Two infrastructure fixes M7 forced (neither was in PLAN.md)**:
+  1. **CORS.** The API had none. The web app is a separate origin (5173 in dev, its own
+     container in Compose), and `X-Acting-User-Id` is a *custom* header, so it must be named in
+     `allowedHeaders` or the browser blocks every mutation at the preflight — reads would have
+     kept working, which would have made this look like a mutation bug. Configurable via
+     `WEB_ORIGIN`.
+  2. **`packages/shared` is now dual-format.** It emitted CommonJS only; Rollup can't trace
+     named re-exports through tsc's `__exportStar` barrel, so `import { ROLE_COLORS }` broke the
+     production web build. It went unnoticed until now because the web app had only ever
+     imported *types*, which erase at compile time. `build` is now two tsc passes (CJS →
+     `dist/`, ESM → `dist/esm/`) with an `exports` map. `apps/api` keeps resolving via `main`
+     (its `moduleResolution: "Node"` predates `exports`). **Any future runtime import from
+     shared depends on this — don't collapse the build back to one pass.**
+- **Other decisions**:
+  - Routes are declared **explicitly**, not through a `view()` factory. The factory erased the
+    literal path types and TanStack Router inferred only two routes; every `<Link to=…>` failed
+    to typecheck. Keep adding routes one by one.
+  - `/` redirects to the first project's overview, with an explicit empty state telling the
+    user to run `db:seed` when there are no projects.
+  - `ActingUserMenu` defaults to the first user and **self-heals if a persisted id no longer
+    exists** (e.g. the DB was reseeded) — otherwise every mutation 403s with no obvious cause.
+  - `apiFetch` throws rather than firing a mutation with no acting user, instead of letting it
+    round-trip to a predictable 403.
+  - View prefs (R10) are persisted client-side but deliberately **not** in the URL, unlike the
+    spec 03/04 filters, which belong there so a filtered view stays shareable.
+- **Verification performed**:
+  - `pnpm exec turbo run build typecheck test --force` — all 8 tasks clean uncached; 64 api +
+    9 web tests.
+  - `client.spec.ts` covers the acceptance criterion at the wrapper: no header on GET, header
+    present on POST/PATCH/DELETE, refusal with no acting user, empty query params dropped, 204
+    handling, and error/issue surfacing.
+  - **Driven in a real browser (Playwright + system Chrome)**: `/` redirected to a project
+    overview; project menu listed all three with the active tick and switching changed the URL;
+    Tickets/Board/People navigated with correct headings; the acting-as menu listed all 8 users
+    and switching to Jordan Lee persisted across a reload (localStorage key present); a POST
+    issued from the page returned **201 with `reporter=Jordan Lee`**, proving CORS + the custom
+    header end to end. **Network inspection confirmed the acceptance criterion directly:** every
+    `GET /projects` and `GET /users` carried no acting-user header, and the POST carried it.
+  - Screenshots reviewed (`shell-overview.png`, `shell-people.png`) — sidebar, switchers, role
+    badge and active nav state all render as in the prototype. The test ticket the browser
+    created was deleted afterwards; Nimbus Triage is back to its 8 demo tickets.
+- **Local dev**: `docker compose up -d postgres` then `pnpm run dev` (turbo runs api on :3000
+  and web on :5173). Demo data from the run session is still in the database.
+- **Open items for next session**: none blocking. M8 (overview dashboard, size S) is next and
+  has everything it needs: `useOverview(projectId)` already exists in `api/queries.ts`, and the
+  shared package exports the colour palettes (`STATUS_COLORS`, `PRIORITY_COLORS`) the prototype
+  used. Replace the `Placeholder` in `overviewRoute`.
 
 ## Completion (Phase 5)
 <!-- Written once, when all modules are done. -->
