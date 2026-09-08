@@ -1,6 +1,8 @@
 import { createRootRoute, createRoute, createRouter, Navigate, Outlet, useParams } from '@tanstack/react-router';
 import { api } from './api/endpoints';
 import { AppShell } from './layout/AppShell';
+import { BoardPage } from './features/board/BoardPage';
+import { validateBoardSearch } from './features/board/searchParams';
 import { OverviewPage } from './features/overview/OverviewPage';
 import { validateTicketSearch } from './features/tickets-list/searchParams';
 import { TicketsListPage } from './features/tickets-list/TicketsListPage';
@@ -80,9 +82,10 @@ const ticketDetailRoute = createRoute({
 const boardRoute = createRoute({
   getParentRoute: () => projectRoute,
   path: 'board',
+  validateSearch: validateBoardSearch,
   component: () => (
     <AppShell title="Board">
-      <Placeholder view="Kanban board" module="M10" />
+      <BoardPage />
     </AppShell>
   ),
 });

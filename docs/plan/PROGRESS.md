@@ -20,7 +20,7 @@
 | M7 Frontend app shell | done | specs/02, 08 (2026-07-15) | 2026-09-08 |
 | M8 Overview dashboard view | done | specs/01 (2026-07-15) | 2026-09-08 |
 | M9 Tickets list view | done | specs/03 (2026-07-15) | 2026-09-08 |
-| M10 Board view | pending | specs/04 (2026-07-15) | — |
+| M10 Board view | done | specs/04 (2026-07-15) | 2026-09-08 |
 | M11 Ticket detail view | pending | specs/05 (2026-07-15) | — |
 | M12 Create ticket view | pending | specs/06 (2026-07-15) | — |
 | M13 People & users views | pending | specs/07 (2026-07-15) | — |
@@ -734,6 +734,66 @@
   "All" (spec 04); (3) `@dnd-kit/core` is not installed yet; (4) spec 04 wants a card to be
   undraggable into a column invalid for its type rather than rejected after the drop, and
   `useMoveTicketStatus` is ready for the optimistic update (R9).
+
+### M10 — Board (Kanban) view (done, 2026-09-08)
+- **Files created** (`apps/web/src/features/board/`):
+  - `columns.ts` — `columnsFor(type)`, **`canDrop(ticket, status)`**, `groupByStatus`. Pure and
+    unit-tested; the drop rule is the same `STATUS_BY_TYPE` table the server validates against.
+  - `useOptimisticMove.ts` — the R9 mutation with cache rollback.
+  - `BoardPage.tsx`, `BoardColumn.tsx` (`useDroppable`), `BoardCard.tsx` (`useDraggable`),
+    `searchParams.ts`, `columns.spec.ts` (11 tests).
+- **Files modified**: `router.tsx` (board route + `validateSearch`), `apps/web/package.json`
+  (`@dnd-kit/core@^6.3.1`).
+- **Key decisions**:
+  - **Invalid drops are prevented, not rejected.** Spec 04 offers a choice; it prefers this one.
+    While a card is dragged, every column its type can't take is `disabled` on the droppable and
+    dimmed, so the drop can't happen. `onDragEnd` still re-checks `canDrop` — a disabled
+    droppable shouldn't be the only thing standing between a user and a bad request. **The
+    server validates independently (R1); none of this is the control.**
+  - **The optimistic update is scoped to the exact board query key.** `useOptimisticMove` takes
+    the current `BoardQuery`, so it patches the cache entry actually on screen — patching a
+    generic key would leave the visible board stale under any filter. `onMutate` cancels
+    in-flight refetches first, or a response landing mid-drag would overwrite the optimistic move.
+  - `onSettled` invalidates the board, the overview and the tickets list, because a status move
+    changes `updated_at` and therefore the dashboard's KPIs and "recently updated" too.
+  - `PointerSensor` uses a 5px activation distance so the card's key can stay a real `<Link>`
+    to the detail view; without it the sensor swallows the click.
+  - Search params mirror M9 exactly (`validateSearch` returns the stripped form,
+    `withDefaults` fills at read time) — kept identical so the two filtered views behave the same.
+  - Columns are `min-w-[170px]`, matching the prototype. Seven columns overflow a typical
+    window by design; the board scrolls horizontally, as the prototype does.
+  - `groupByStatus` drops a ticket whose status isn't in the visible column set rather than
+    inventing a column for it.
+- **Verification performed**:
+  - `pnpm exec turbo run build typecheck test --force` — 8 tasks clean; 64 api + 31 web tests
+    (11 new: column sets per type, the spec 04 "bug into Planned" case, epic-into-story-column,
+    grouping with empty columns preserved, and the URL params).
+  - **Driven in a real browser with actual mouse drags (Playwright + system Chrome)**:
+    - Columns for Type=All were the 7-status union; Type=epic narrowed to
+      `Planned / In Progress / Done`; Type=bug gave the six story/bug statuses.
+    - Sprint filter listed `All / Backlog (no sprint) / Sprint 24-26`; `?sprint=backlog`
+      returned only unassigned cards.
+    - **A real drag of story NIM-3 into "In Review" moved the card and the server persisted
+      `In Review`.**
+    - **Dragging an epic dimmed exactly 4 of 7 columns** (the story/bug-only ones) and dropping
+      it on Backlog left the server status unchanged.
+    - **R9 rollback, with the response delayed 1.5s to make the window observable: the card
+      showed in "Done" while the request was in flight, snapped back to "In Progress" on the
+      400, surfaced "Move failed — the card snapped back", and the server was untouched.**
+      (A first attempt sampled at 60ms and missed the window — the mocked failure returned
+      faster than the sample; the delay is what makes this test meaningful.)
+    - **Console errors: none.** Test data was restored afterwards.
+  - Screenshots reviewed (`m10-board.png`, `m10-dragging.png`, `m10-final.png`,
+    `m10-rollback.png`). The dimming and drag overlay were confirmed visually, and the clipped
+    rightmost column led to matching the prototype's 170px column width.
+- **Open items for next session**: none blocking. **M11 (ticket detail, size M)** is next.
+  Notes: (1) `useTicket(id)`, `useUpdateTicket`, `useDeleteTicket`, `useAddComment` all exist;
+  (2) the API's `GET /tickets/:id` already returns `statusOptions` and `storyOptions`, so the
+  form's dropdowns need no client-side derivation; (3) spec 05 wants the draft/dirty pattern
+  preserved — edits held locally, `PATCH` only on explicit Save; (4) delete is Admin/Manager
+  only and must be hidden **and** guarded (`can('deleteTicket', role)` equivalent — the web
+  side has no `can()` helper yet, so add one or read `PERMISSIONS` from shared);
+  (5) the detail route already exists and cards/rows link to it.
 
 ## Completion (Phase 5)
 <!-- Written once, when all modules are done. -->
