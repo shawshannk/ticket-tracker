@@ -3,6 +3,7 @@ import { api } from './api/endpoints';
 import { AppShell } from './layout/AppShell';
 import { BoardPage } from './features/board/BoardPage';
 import { validateBoardSearch } from './features/board/searchParams';
+import { CreateTicketPage } from './features/create-ticket/CreateTicketPage';
 import { OverviewPage } from './features/overview/OverviewPage';
 import { TicketDetailPage } from './features/ticket-detail/TicketDetailPage';
 import { validateTicketSearch } from './features/tickets-list/searchParams';
@@ -90,7 +91,7 @@ const createTicketRoute = createRoute({
   path: 'create',
   component: () => (
     <AppShell title="New Ticket">
-      <Placeholder view="Create ticket" module="M12" />
+      <CreateTicketPage />
     </AppShell>
   ),
 });

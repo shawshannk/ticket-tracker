@@ -22,7 +22,7 @@
 | M9 Tickets list view | done | specs/03 (2026-07-15) | 2026-09-08 |
 | M10 Board view | done | specs/04 (2026-07-15) | 2026-09-08 |
 | M11 Ticket detail view | done | specs/05 (2026-07-15) | 2026-09-08 |
-| M12 Create ticket view | pending | specs/06 (2026-07-15) | — |
+| M12 Create ticket view | done | specs/06 (2026-07-15) | 2026-09-08 |
 | M13 People & users views | pending | specs/07 (2026-07-15) | — |
 | M14 Testing & CI | pending | specs/09 (2026-07-15) | — |
 
@@ -857,6 +857,65 @@
   selected epic, and the epic can change while the form is open, so it needs a live query
   rather than M11's server-computed `storyOptions`; (4) submit navigates to the new ticket's
   detail view (spec 06).
+
+### M12 — Create Ticket view (done, 2026-09-08)
+- **Files created** (`apps/web/src/features/create-ticket/`):
+  - `buildPayload.ts` — `emptyForm`, `parseLabels`, **`buildPayload`** (flat form → the
+    discriminated union) and **`validate`** (against the shared `ticketCreateSchema`). Pure, so
+    the branching is unit-tested without rendering.
+  - `CreateTicketPage.tsx`, `buildPayload.spec.ts` (11 tests).
+- **Files modified**: `router.tsx`; **`packages/shared/src/schemas.ts`** (see below).
+- **Key decisions**:
+  - **The form validates with the same `ticketCreateSchema` the API enforces**, so it cannot
+    offer a payload the server would reject. Zod issues are mapped to field-keyed inline errors
+    and only shown after a submit attempt, not while typing.
+  - **Human-readable validation messages were added to the shared schema** — it previously
+    surfaced raw Zod text ("String must contain at least 1 character(s)", "Invalid uuid")
+    straight into the form. They now read "Title is required" / "An epic is required for a
+    story or bug". **This improves the API's 400 responses too**, since both sides share the
+    schema; that was the reason to fix it in `shared` rather than paper over it in the form.
+  - `buildPayload` **omits** fields that don't belong to the chosen type rather than sending
+    them as null — the discriminated union rejects unknown members. `reporter` is never sent
+    (spec 06: server fills it from the acting user).
+  - Type pills are **filtered**, not disabled: `can('createEpic', role)` from shared hides Epic
+    from Developers, as spec 06 requires. A guard also resets the form if the acting user
+    switches to a Developer while Epic is selected. **The server re-checks this (M5a).**
+  - The Story dropdown is a **live query** keyed on the currently selected epic, not the
+    server-computed `storyOptions` M11 uses — here the epic can change while the form is open,
+    and a story chosen under the previous epic is cleared when it does (R5).
+  - Form defaults (`env: staging`, `size: m`, `severity: 3`, `priority: medium`) exist because
+    the shared schema requires those on story/bug with no defaults of its own; a Story/Bug form
+    is therefore valid as soon as a title and epic are set.
+  - A project with **no epics** shows an explicit amber note ("create an epic first") rather
+    than an empty dropdown and an unexplained validation failure.
+  - Switching type preserves title and description but resets type-specific fields.
+- **Verification performed**:
+  - `pnpm exec turbo run build typecheck test --force` — 8 tasks clean; 64 api + 49 web tests.
+  - **Driven in a real browser (Playwright + system Chrome)**:
+    - **As a Developer the type pills are `Story / Bug`; as a Manager, `Epic / Story / Bug`.**
+    - Field branching verified by reading the rendered labels: epic has no env/severity/
+      epic/story/sprint/size; story adds epic/sprint/size; bug adds severity, environment and
+      the story link.
+    - Submitting an empty form showed the new inline messages.
+    - **The story dropdown tracks the selected epic: NIM-1 → NIM-3/NIM-4, NIM-2 → NIM-5**, and
+      reads "Pick an epic first" before one is chosen.
+    - **A full bug submission navigated to the new ticket's detail view** (header
+      "Tickets / NIM-13 Payment webhook retries stall") and the stored row was
+      `type=bug, status=Backlog, severity=3, env=staging, epic=NIM-1, story=NIM-3,
+      labels=[payments, urgent]` with **`reporter: Aisha Patel` — the acting user, never the
+      form**. The test ticket was deleted afterwards. **Console errors: none.**
+  - Screenshots reviewed (`m12-form.png`, `m12-created.png`, `m12-final.png`). This caught a
+    real rendering bug: a blanket `capitalize` class title-cased the placeholder into
+    "Select An Epic…", so enum labels are now capitalised in JS and sizes render "XS/S/M/L/XL".
+- **Open items for next session**: none blocking. **M13 (People & users, size S)** is next —
+  the last feature module. Notes: (1) `useUsers()` exists but there are **no user-mutation
+  hooks yet** — `api.users.create/update` exist in `api/endpoints.ts`, so add
+  `useCreateUser`/`useUpdateUser` to `api/queries.ts` alongside the ticket ones;
+  (2) "Add team member" and the edit form are Admin-only — use `can('manageUsers', role)`;
+  (3) spec 07 has **no delete**, deliberately; (4) `userCreateSchema`/`userUpdateSchema` are in
+  shared — validate the form with them as M12 does; (5) after M13, only **M14 (testing
+  hardening + Playwright e2e + GitHub Actions CI)** remains, which still owes the decision about
+  running `test:integration` (and now the web suite) in CI with a live Postgres.
 
 ## Completion (Phase 5)
 <!-- Written once, when all modules are done. -->

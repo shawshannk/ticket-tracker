@@ -44,9 +44,11 @@ export const projectCreateSchema = z.object({
 // payload depend on `type`, enforced with a discriminated union rather than one loose object.
 
 const baseTicketSchema = z.object({
-  title: z.string().min(1),
+  // Messages are written for a person, since they surface both in the API's 400 payload and
+  // inline in the create form (the frontend validates with this same schema).
+  title: z.string().min(1, 'Title is required'),
   description: z.string().default(''),
-  assigneeId: z.string().uuid().nullable().optional(),
+  assigneeId: z.string().uuid('Select a valid user').nullable().optional(),
   labels: z.array(z.string()).default([]),
 });
 
@@ -56,13 +58,13 @@ const storyOrBugFields = z.object({
   size: ticketSizeSchema,
   startDate: z.string().nullable().optional(),
   estimatedEndDate: z.string().nullable().optional(),
-  sprintId: z.string().uuid().nullable().optional(),
-  epicId: z.string().uuid(),
+  sprintId: z.string().uuid('Select a valid sprint').nullable().optional(),
+  epicId: z.string().uuid('An epic is required for a story or bug'),
 });
 
 const bugOnlyFields = z.object({
   severity: ticketSeveritySchema,
-  storyId: z.string().uuid().nullable().optional(),
+  storyId: z.string().uuid('Select a valid story').nullable().optional(),
 });
 
 export const epicCreateSchema = baseTicketSchema.extend({
