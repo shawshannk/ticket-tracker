@@ -1,16 +1,21 @@
-import { Body, Controller, Delete, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
-import { CommandBus } from '@nestjs/cqrs';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   commentCreateSchema,
   moveTicketStatusSchema,
   ticketCreateSchema,
+  ticketListQuerySchema,
   ticketUpdateSchema,
   type Comment,
   type CommentCreateDto,
   type MoveTicketStatusDto,
+  type Paged,
   type Ticket,
   type TicketCreateDto,
+  type TicketDetail,
+  type TicketListQuery,
+  type TicketSummary,
   type TicketUpdateDto,
   type User,
 } from '@ticket-tracker/shared';
@@ -24,11 +29,32 @@ import { CreateTicketCommand } from './commands/create-ticket.command';
 import { DeleteTicketCommand } from './commands/delete-ticket.command';
 import { MoveTicketStatusCommand } from './commands/move-ticket-status.command';
 import { UpdateTicketCommand } from './commands/update-ticket.command';
+import { GetTicketDetailQuery } from './queries/get-ticket-detail.query';
+import { GetTicketsQuery } from './queries/get-tickets.query';
 
 @ApiTags('tickets')
 @Controller()
 export class TicketsController {
-  constructor(private readonly commandBus: CommandBus) {}
+  constructor(
+    private readonly commandBus: CommandBus,
+    private readonly queryBus: QueryBus,
+  ) {}
+
+  /** Reads are open — no acting user needed — but always project-scoped (R2), paged (R8). */
+  @Get('projects/:projectId/tickets')
+  @ApiOperation({ summary: 'List a project\'s tickets (filtered, sorted, paginated)' })
+  list(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Query(new ZodValidationPipe(ticketListQuerySchema)) query: TicketListQuery,
+  ): Promise<Paged<TicketSummary>> {
+    return this.queryBus.execute(new GetTicketsQuery(projectId, query));
+  }
+
+  @Get('tickets/:id')
+  @ApiOperation({ summary: 'Get a ticket with comments, status options and story options' })
+  detail(@Param('id', ParseUUIDPipe) id: string): Promise<TicketDetail> {
+    return this.queryBus.execute(new GetTicketDetailQuery(id));
+  }
 
   /**
    * Tickets are created under a project, so the route carries the tenancy boundary (R2).

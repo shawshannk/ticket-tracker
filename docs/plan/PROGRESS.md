@@ -15,7 +15,8 @@
 | M4 Projects API + key sequence | done | specs/02 (2026-07-15) | 2026-09-08 |
 | M5a Ticket rules + create | done | specs/06, 00 (2026-07-15) | 2026-09-08 |
 | M5b Update/move/delete/comment | done | specs/05, 04, 00 (2026-07-15) | 2026-09-08 |
-| M6 Tickets read side | pending | specs/03, 05, 04, 01 (2026-07-15) | — |
+| M6a Read DTOs + list + detail | done | specs/03, 05 (2026-07-15) | 2026-09-08 |
+| M6b Board + overview | pending | specs/04, 01 (2026-07-15) | — |
 | M7 Frontend app shell | pending | specs/02, 08 (2026-07-15) | — |
 | M8 Overview dashboard view | pending | specs/01 (2026-07-15) | — |
 | M9 Tickets list view | pending | specs/03 (2026-07-15) | — |
@@ -395,6 +396,82 @@
   (3) `toTicket` / `toUser` / `toProject` mappers exist and should be reused;
   (4) M6 is sized L — consider splitting it the way M5 was split, e.g. list+detail then
   board+overview.
+
+### M6a — Shared read DTOs + tickets list + ticket detail (done, 2026-09-08)
+> **PLAN.md changed this session**: M6 (L) was split into **M6a** (read DTOs + list + detail)
+> and **M6b** (board + overview), mirroring the M5 split. The R2 acceptance test is split by
+> endpoint: list is covered here; board/overview belong to M6b.
+
+- **Files created**:
+  - `apps/api/src/tickets/queries/ticket-summary.ts` — **the piece M6b reuses.** Exports the
+    three join aliases (`assignee`, `epic`, `story`), `summaryColumns`, `summarySelect(executor)`
+    (the joined select) and `toTicketSummary(row)`. Board and the overview's `recentActivity`
+    must go through this so all "row of tickets" views agree on shape and names.
+  - `queries/get-tickets.query.ts` (`GET /projects/:projectId/tickets`),
+    `queries/get-ticket-detail.query.ts` (`GET /tickets/:id`),
+    `queries/read-queries.int-spec.ts` (13 integration tests).
+- **Files modified**:
+  - `packages/shared/src/schemas.ts` — `ticketListQuerySchema` + `TICKET_SORT_FIELDS`. Lives in
+    shared on purpose: the frontend's URL search-param validation (R7, M9) should parse with
+    this exact schema, so the API and the address bar can't disagree. Uses `z.coerce` for
+    page/pageSize because query-string values arrive as strings.
+  - `packages/shared/src/types.ts` — `UserRef`, `TicketRef`, `TicketSummary`,
+    `CommentWithAuthor`, `TicketDetail`, `Paged<T>`, `TicketListQuery`, `TicketListQueryInput`
+    (the pre-default `z.input` form — what a URL parser starts from). These are the spec 00
+    "DTO/summary shapes" SPEC.md assigns to shared; M6b adds `OverviewStats` beside them.
+  - `tickets.controller.ts` / `tickets.module.ts` — two read routes and handlers; the
+    controller now injects `QueryBus` alongside `CommandBus`.
+- **Key decisions / deviations from PLAN.md**:
+  - **Reads need no acting user.** Neither route carries `@Roles`; spec 08 only sends the
+    header on mutating calls. Always project-scoped by `WHERE project_id = …` (R2), and all
+    filtering/search/sort/paging is SQL (R8) — nothing is filtered in memory.
+  - Search is `ILIKE %term%` over title, key and `assignee.name` — exactly spec 03's three
+    fields, no more — with LIKE metacharacters escaped so a search for `%` or `_` is literal.
+    **A blank/whitespace-only `search` is "no filter", not a 400** (found by the integration
+    test; fixed in the shared schema with a `.transform`).
+  - `total` is computed by a second `count()` query sharing the same WHERE (it needs the
+    assignee join because search touches `assignee.name`). Both queries run in parallel.
+  - Sort has a stable tiebreak (`created_at desc, id asc`) so paging over ties can't skip or
+    duplicate rows. `sortBy=priority` relies on Postgres enum declaration order
+    (critical → high → medium → low), so `asc` = most urgent first; **if the enum is ever
+    reordered, this ordering silently changes.**
+  - Detail's `storyOptions` is only populated for **bugs** with an epic (the dropdown exists
+    only on the bug form per specs 05/06), scoped to the project *and* the epic; empty for
+    epics/stories. `statusOptions` is `STATUS_BY_TYPE[type]` — the same table the write side
+    validates against. Comments are oldest-first with the author's `{id, name}` joined in.
+  - A list for a **nonexistent project returns `{ total: 0 }` with 200**, not 404. Defensible
+    (it's a filter, and the frontend resolves the project via `GET /projects/:id` first) but a
+    choice — cheap to change to a 404 if the user prefers.
+- **Environment gotcha (not code)**: partway through, `apps/web` failed to build with
+  `Cannot find type definition file for 'vite/client'` — the `apps/web/node_modules/vite`
+  workspace link had gone missing, and earlier turbo runs had hidden it by replaying a cached
+  web success. `pnpm install --frozen-lockfile` restored it (+4 links). If a workspace
+  suddenly can't find a dependency it clearly has in `package.json`, check the symlinks and
+  run `turbo … --force` to bypass the cache before suspecting the code.
+- **Verification performed**:
+  - `pnpm exec turbo run build typecheck --force` — all six tasks clean, uncached.
+  - `pnpm run test` — 64 unit. `pnpm run test:integration` — **43 tests**, 13 new: project
+    scoping and newest-first default; **R2: project B never sees A's rows, even for a search
+    term that matches rows in A**; assignee + Epic ▸ Story breadcrumb names (null on epics);
+    every filter individually and AND-combined; search over title / key / assignee name,
+    case-insensitively; LIKE metacharacters literal; pagination with a stable order and the
+    filter's `total` on every page; sort by createdAt/title/priority (enum order); schema
+    defaults and bounds; detail's names, `statusOptions` per type, `storyOptions` limited to
+    the bug's own epic, comments oldest-first with authors, 404.
+  - Live over HTTP with NIM + ATL fixtures: list defaults, ATL isolation under a matching
+    search, `type=bug` breadcrumb, `search=TOKEN`, assignee-name search, blank search → total
+    unchanged, combined filters, `page=2&pageSize=2`, priority sort, `pageSize=500` → 400,
+    `sortBy=reporter` → 400, unknown project → total 0; detail for bug/story/epic, unknown
+    → 404; Swagger 200. DB restored to 8 users / 3 projects / 0 tickets / 0 comments.
+- **Open items for next session**: none blocking. **M6b (board + overview)** is next and is
+  the last backend module. Notes: (1) build both reads on `summarySelect`/`toTicketSummary`;
+  (2) board is `GET /projects/:projectId/board?sprint=&type=` returning a flat
+  `TicketSummary[]` — `sprint` takes `backlog` (sprint_id IS NULL) or a sprint id, per spec
+  04; (3) overview is one aggregation query per spec 00's "computed values" with guards for
+  the empty project (no divide-by-zero in percentages / `avgResolutionDays`); (4) add
+  `OverviewStats` to shared; (5) the sprints table is still empty and has no API — M6b may
+  need a minimal `GET /projects/:projectId/sprints` for the board's Sprint filter, which
+  PLAN.md doesn't list anywhere; flag it when M6b starts.
 
 ## Completion (Phase 5)
 <!-- Written once, when all modules are done. -->

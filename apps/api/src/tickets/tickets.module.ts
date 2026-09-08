@@ -6,6 +6,8 @@ import { CreateTicketHandler } from './commands/create-ticket.command';
 import { DeleteTicketHandler } from './commands/delete-ticket.command';
 import { MoveTicketStatusHandler } from './commands/move-ticket-status.command';
 import { UpdateTicketHandler } from './commands/update-ticket.command';
+import { GetTicketDetailHandler } from './queries/get-ticket-detail.query';
+import { GetTicketsHandler } from './queries/get-tickets.query';
 import { TicketsController } from './tickets.controller';
 
 @Module({
@@ -19,6 +21,8 @@ import { TicketsController } from './tickets.controller';
     MoveTicketStatusHandler,
     DeleteTicketHandler,
     AddCommentHandler,
+    GetTicketsHandler,
+    GetTicketDetailHandler,
   ],
 })
 export class TicketsModule {}

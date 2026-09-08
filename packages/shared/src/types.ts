@@ -8,6 +8,7 @@ import {
   projectCreateSchema,
   storyCreateSchema,
   ticketCreateSchema,
+  ticketListQuerySchema,
   ticketUpdateSchema,
   userCreateSchema,
   userUpdateSchema,
@@ -84,3 +85,63 @@ export type TicketCreateDto = z.infer<typeof ticketCreateSchema>;
 export type TicketUpdateDto = z.infer<typeof ticketUpdateSchema>;
 export type MoveTicketStatusDto = z.infer<typeof moveTicketStatusSchema>;
 export type CommentCreateDto = z.infer<typeof commentCreateSchema>;
+export type TicketListQuery = z.infer<typeof ticketListQuerySchema>;
+/** The raw, pre-default form — what a URL search-param parser starts from. */
+export type TicketListQueryInput = z.input<typeof ticketListQuerySchema>;
+
+// --- Read models (spec 00 "DTO/summary shapes") ---
+
+export interface UserRef {
+  id: string;
+  name: string;
+}
+
+export interface TicketRef {
+  id: string;
+  key: string;
+  title: string;
+}
+
+/** One row of the list / board / recent-activity views: the ticket plus the names it shows. */
+export interface TicketSummary {
+  id: string;
+  projectId: string;
+  key: string;
+  type: TicketType;
+  title: string;
+  status: string;
+  priority: TicketPriority;
+  severity: TicketSeverity | null;
+  env: TicketEnv | null;
+  labels: string[];
+  assignee: UserRef | null;
+  /** Breadcrumb parents (spec 03: "Epic ▸ Story", hidden for epics). */
+  epic: TicketRef | null;
+  story: TicketRef | null;
+  sprintId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CommentWithAuthor extends Comment {
+  author: UserRef;
+}
+
+/** GET /tickets/:id (spec 05): the full row plus everything the detail view needs to render. */
+export interface TicketDetail extends Ticket {
+  assignee: UserRef | null;
+  epic: TicketRef | null;
+  story: TicketRef | null;
+  comments: CommentWithAuthor[];
+  /** Computed server-side from the ticket's type — the only statuses this ticket may take. */
+  statusOptions: string[];
+  /** Stories under this ticket's epic; the bug's story-link dropdown. Empty for non-bugs. */
+  storyOptions: TicketRef[];
+}
+
+export interface Paged<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}

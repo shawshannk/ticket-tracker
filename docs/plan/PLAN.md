@@ -88,14 +88,36 @@ specs win on conflict. Resolved conflicts: D-key (per-project keys) and R10 (vie
 - **Depends on**: M5a
 
 ### M6: Tickets read side — list / detail / board / overview (L)
-- **Goal**: All read queries with scoping, filtering, pagination, and computed overview stats.
-- **Source spec**: specs/03-tickets-list.md, specs/05-ticket-detail.md, specs/04-board-view.md, specs/01-overview-dashboard.md
-- **Files**: `apps/api/src/tickets/queries/*` (GetTickets w/ filters+pagination+sort, GetTicketDetail incl. comments+statusOptions+storyOptions, GetBoard flat filtered list, GetOverviewStats single-query aggregation). Routes `GET /projects/:projectId/tickets`, `GET /tickets/:id`, `GET /projects/:projectId/board`, `GET /projects/:projectId/overview`.
+> **Split into M6a / M6b on 2026-09-08**, as M5 was. Acceptance criteria divided, unchanged
+> in substance; the R2 isolation test is split by endpoint.
+
+#### M6a: Shared read DTOs + tickets list + ticket detail (M)
+- **Goal**: The two ticket-shaped reads, with the summary select/mapper every later read reuses.
+- **Source spec**: specs/03-tickets-list.md, specs/05-ticket-detail.md
+- **Files**: `packages/shared` additions (`TicketSummary`, `TicketDetail`, `Paged<T>`,
+  `ticketListQuerySchema`); `apps/api/src/tickets/queries/ticket-summary.ts` (joined select +
+  mapper shared by list / board / overview), `queries/get-tickets.query.ts`,
+  `queries/get-ticket-detail.query.ts`; routes `GET /projects/:projectId/tickets`,
+  `GET /tickets/:id`.
 - **Acceptance criteria**:
-  - List returns `{ items, total }`, honors status/priority/assignee/env/epic/type/search + page/pageSize + sort.
-  - Integration test for R2: a ticket created in project A never appears in project B's list/board/overview.
-  - Overview computed in one query; empty-project edge cases return 0 / 0.0 without divide-by-zero.
+  - List returns `{ items, total }`, honors status/priority/assignee/env/epic/type/search +
+    page/pageSize + sortBy/sortDir; search is case-insensitive substring over title/key/assignee name.
+  - Detail includes `comments[]` (with author), `statusOptions` from the ticket's type, and
+    `storyOptions` (stories under its epic).
+  - Integration test for R2: a ticket created in project A never appears in project B's list.
 - **Depends on**: M5
+
+#### M6b: Board + overview stats (M)
+- **Goal**: The board's flat filtered list and the overview's single-query aggregation.
+- **Source spec**: specs/04-board-view.md, specs/01-overview-dashboard.md
+- **Files**: `packages/shared` `OverviewStats`; `queries/get-board.query.ts`,
+  `queries/get-overview-stats.query.ts`; routes `GET /projects/:projectId/board`,
+  `GET /projects/:projectId/overview`.
+- **Acceptance criteria**:
+  - Board honors sprint/type filters and returns `TicketSummary[]` flat (grouping is client-side).
+  - Overview computed in one query; empty-project edge cases return 0 / 0.0 without divide-by-zero.
+  - Integration test for R2: project A's tickets never appear in project B's board/overview.
+- **Depends on**: M6a
 
 ### M7: Frontend app shell — routing, layout, API client, acting-as & project switcher (M)
 - **Goal**: The web skeleton every view mounts into: typed API client from OpenAPI, TanStack Router tree nested under `/projects/$projectId`, sidebar with project switcher (route change) + acting-as selector (Zustand), API wrapper attaching `X-Acting-User-Id`.

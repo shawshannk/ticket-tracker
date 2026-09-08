@@ -109,3 +109,29 @@ export const moveTicketStatusSchema = z.object({
 export const commentCreateSchema = z.object({
   body: z.string().min(1),
 });
+
+// --- Ticket list query (GET /projects/:projectId/tickets) ---
+// Lives in shared so the frontend's URL-search-param validation (R7) is the same schema the
+// API enforces. `coerce` because query-string values arrive as strings.
+
+export const TICKET_SORT_FIELDS = ['createdAt', 'updatedAt', 'key', 'title', 'status', 'priority'] as const;
+export type TicketSortField = (typeof TICKET_SORT_FIELDS)[number];
+
+export const ticketListQuerySchema = z.object({
+  status: z.string().min(1).optional(),
+  priority: ticketPrioritySchema.optional(),
+  assignee: z.string().uuid().optional(),
+  env: ticketEnvSchema.optional(),
+  epic: z.string().uuid().optional(),
+  type: ticketTypeSchema.optional(),
+  // A blank search box means "no filter", not an error.
+  search: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  sortBy: z.enum(TICKET_SORT_FIELDS).default('createdAt'),
+  sortDir: z.enum(['asc', 'desc']).default('desc'),
+});
