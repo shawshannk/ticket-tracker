@@ -1,9 +1,10 @@
-import { createRootRoute, createRoute, createRouter, Navigate, Outlet, useParams } from '@tanstack/react-router';
+import { createRootRoute, createRoute, createRouter, Navigate, Outlet } from '@tanstack/react-router';
 import { api } from './api/endpoints';
 import { AppShell } from './layout/AppShell';
 import { BoardPage } from './features/board/BoardPage';
 import { validateBoardSearch } from './features/board/searchParams';
 import { OverviewPage } from './features/overview/OverviewPage';
+import { TicketDetailPage } from './features/ticket-detail/TicketDetailPage';
 import { validateTicketSearch } from './features/tickets-list/searchParams';
 import { TicketsListPage } from './features/tickets-list/TicketsListPage';
 import { Placeholder } from './routes/Placeholder';
@@ -69,14 +70,8 @@ const ticketsRoute = createRoute({
 const ticketDetailRoute = createRoute({
   getParentRoute: () => projectRoute,
   path: 'tickets/$ticketId',
-  component: function TicketDetailView() {
-    const { ticketId } = useParams({ from: '/projects/$projectId/tickets/$ticketId' });
-    return (
-      <AppShell title={<span className="font-mono text-[15px]">{ticketId.slice(0, 8)}…</span>}>
-        <Placeholder view="Ticket detail" module="M11" />
-      </AppShell>
-    );
-  },
+  // This page renders its own AppShell so the topbar can show the loaded ticket's key.
+  component: TicketDetailPage,
 });
 
 const boardRoute = createRoute({

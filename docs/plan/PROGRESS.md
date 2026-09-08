@@ -21,7 +21,7 @@
 | M8 Overview dashboard view | done | specs/01 (2026-07-15) | 2026-09-08 |
 | M9 Tickets list view | done | specs/03 (2026-07-15) | 2026-09-08 |
 | M10 Board view | done | specs/04 (2026-07-15) | 2026-09-08 |
-| M11 Ticket detail view | pending | specs/05 (2026-07-15) | — |
+| M11 Ticket detail view | done | specs/05 (2026-07-15) | 2026-09-08 |
 | M12 Create ticket view | pending | specs/06 (2026-07-15) | — |
 | M13 People & users views | pending | specs/07 (2026-07-15) | — |
 | M14 Testing & CI | pending | specs/09 (2026-07-15) | — |
@@ -794,6 +794,69 @@
   only and must be hidden **and** guarded (`can('deleteTicket', role)` equivalent — the web
   side has no `can()` helper yet, so add one or read `PERMISSIONS` from shared);
   (5) the detail route already exists and cards/rows link to it.
+
+### M11 — Ticket Detail view (done, 2026-09-08)
+- **Files created**:
+  - `apps/web/src/features/ticket-detail/useTicketDraft.ts` — **spec 05's draft/dirty pattern.**
+    `draftFrom`, `changedFields`, `useTicketDraft`. Exported pure functions so the diffing is
+    unit-tested without rendering.
+  - `TicketDetailPage.tsx` (two-column layout, editable side panel, role-gated delete),
+    `Comments.tsx`, `useTicketDraft.spec.ts` (7 tests).
+  - **`packages/shared/src/permissions.ts`** — see below.
+- **Files modified**: `router.tsx`; `apps/api/src/auth/permissions.ts` (now a re-export);
+  `packages/shared/src/index.ts`.
+- **Key decisions**:
+  - **The role matrix moved from `apps/api/src/auth/permissions.ts` into
+    `packages/shared/src/permissions.ts`.** M10's handoff flagged that the web had no `can()`
+    helper; duplicating the matrix would have been two sources of truth for a spec 00 contract.
+    The API file is now a re-export, so every `../auth/permissions` import still works and all
+    64 API tests pass unchanged. `can()` also accepts `null | undefined` for the web, where no
+    acting user may be selected yet. **The frontend uses it only to hide controls — spec 08 is
+    explicit that this is UX and the server guard is the actual control.**
+  - **`changedFields` sends only what changed**, so a PATCH never rewrites untouched columns,
+    and null/undefined are treated as the same absence (an unset date is `null` from the API
+    but `''` from a cleared date input). Verified live: the PATCH body was exactly
+    `{"status":"Blocked","priority":"low"}`.
+  - The draft re-seeds on `ticket.id` **and `ticket.updatedAt`**, so a successful save clears
+    the dirty state without a manual reset — and editing a field back to its original value by
+    hand goes clean again, since dirtiness is a diff rather than a touched flag.
+  - **The detail page renders its own `AppShell`**, unlike every other route, because spec 05's
+    header needs the loaded ticket's key and title plus a back link — data the route wrapper
+    doesn't have. Reads "Tickets / NIM-6 Token leak on retry path".
+  - `statusOptions` and `storyOptions` come straight from `GET /tickets/:id` (M6a) — the client
+    derives neither. Fields absent for a type simply aren't rendered: an epic's panel shows
+    only Status / Priority / Assignee / dates.
+  - Delete asks for confirmation, then navigates back to the list on success.
+- **Verification performed**:
+  - `pnpm exec turbo run build typecheck test --force` — 8 tasks clean; 64 api + 38 web tests.
+  - **Driven in a real browser (Playwright + system Chrome)**:
+    - **Acting as a Developer the Delete button is absent; switching to Admin reveals it.**
+    - Dirty tracking: Save disabled before any edit → enabled after changing status →
+      **disabled again after reverting the change by hand** → "Saved ✓" after saving, reverting
+      to "Save changes" ~2s later.
+    - The PATCH carried only the two changed fields and the server reflected `Blocked / low`.
+    - **R6: a comment posted while acting as Diego Ramirez was stored with him as author** and
+      the Activity count went 2 → 3.
+    - All eight side-panel dropdowns verified by reading their rendered options:
+      status (6 story/bug values), priority, assignee (Unassigned + 8), environment, epic,
+      **story limited to NIM-3/NIM-4 — both under the bug's own epic NIM-1, excluding NIM-5
+      which sits under a different epic**, sprint (Backlog + 3), size.
+    - An **epic's** panel correctly omits environment, epic/story and sprint/size.
+    - The header back link returns to the tickets list. **Console errors: none.**
+  - Screenshots reviewed (`m11-detail.png`, `m11-final.png`, `m11-epic.png`); the missing
+    header breadcrumb was caught this way and fixed.
+- **Gotcha (dev environment, not code)**: running `turbo run build --force` while
+  `pnpm run dev` is up **kills the API** — nest-cli's `deleteOutDir` wipes `dist/` under the
+  running watcher, which then dies with `Cannot find module './app.module'`. Restart
+  `pnpm run dev`. Don't run a forced build against a live dev server.
+- **Open items for next session**: none blocking. **M12 (create ticket, size M)** is next.
+  Notes: (1) `useCreateTicket(projectId)` exists and `ticketCreateSchema` is the shared
+  discriminated union — validate the form with it so client and server agree;
+  (2) the Epic type option must be hidden for Developers — use `can('createEpic', role)`, now
+  importable from shared; (3) the bug form's Story dropdown must filter to stories under the
+  selected epic, and the epic can change while the form is open, so it needs a live query
+  rather than M11's server-computed `storyOptions`; (4) submit navigates to the new ticket's
+  detail view (spec 06).
 
 ## Completion (Phase 5)
 <!-- Written once, when all modules are done. -->
