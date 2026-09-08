@@ -11,7 +11,6 @@ import { OverviewPage } from './features/overview/OverviewPage';
 import { TicketDetailPage } from './features/ticket-detail/TicketDetailPage';
 import { validateTicketSearch } from './features/tickets-list/searchParams';
 import { TicketsListPage } from './features/tickets-list/TicketsListPage';
-import { Placeholder } from './routes/Placeholder';
 
 /**
  * Spec 02: every main view lives under `/projects/$projectId`, so the current project is a

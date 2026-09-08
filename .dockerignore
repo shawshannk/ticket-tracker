@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/.turbo
+**/.vite
+.git
+e2e/test-results
+e2e/playwright-report
+reference
+docs

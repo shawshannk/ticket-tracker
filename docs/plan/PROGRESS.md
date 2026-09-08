@@ -24,7 +24,7 @@
 | M11 Ticket detail view | done | specs/05 (2026-07-15) | 2026-09-08 |
 | M12 Create ticket view | done | specs/06 (2026-07-15) | 2026-09-08 |
 | M13 People & users views | done | specs/07 (2026-07-15) | 2026-09-08 |
-| M14 Testing & CI | pending | specs/09 (2026-07-15) | — |
+| M14 Testing & CI | done | specs/09 (2026-07-15) | 2026-09-08 |
 
 ## Handoff log
 <!-- One entry per module, written at completion time (Phase 4 step 4). -->
@@ -979,6 +979,78 @@
      `docker-compose.yml` references `build:` paths for both (noted since M1). Only the
      `postgres` service is usable today.
   4. Spec 09 is the source spec and has not been re-read since M1 — start there.
+
+### M14 — Testing hardening & CI (done, 2026-09-08)
+**Final module. All 16 are complete.** This one also closed the four items carried since M1/M4.
+
+- **Files created**:
+  - `eslint.config.mjs` — flat config for the whole monorepo, plus `lint` scripts in all three
+    workspaces. **Nothing linted before this**: `turbo run lint` was a no-op because no
+    workspace defined the script, even though spec 09's pipeline includes a lint stage.
+  - `playwright.config.ts`, `e2e/fixtures.ts`, `e2e/happy-path.spec.ts`, `e2e/rules.spec.ts`.
+  - `apps/api/Dockerfile`, `apps/web/Dockerfile`, `.dockerignore`.
+  - `.github/workflows/ci.yml` — four jobs: `verify`, `integration`, `e2e`, `docker`.
+- **Files modified**: `docker-compose.yml` (rewritten), root/workspace `package.json` scripts,
+  `.gitignore`, and three files whose dead imports lint caught.
+- **Key decisions**:
+  - **CI is split so slow work doesn't gate fast feedback** (spec 09). `verify` runs
+    typecheck → lint → unit → build with no database. `integration` runs a Postgres **service
+    container**, migrates, seeds, and runs the API's 55 integration tests — **this is the
+    decision outstanding since M4**; without this job the key-sequence race and R2 isolation
+    coverage would never run in CI. `e2e` is a separate job, and `docker` proves the images
+    build.
+  - **ESLint is deliberately type-unaware.** `turbo run typecheck` already runs the real
+    compiler over every workspace; enabling typed linting would roughly double CI time to
+    re-find the same errors. `react-hooks/exhaustive-deps` is a **warning**, not an error —
+    five effects intentionally omit stable setters and are annotated at the call site; making
+    it an error would only invite blanket disables.
+  - **Compose was wrong and had never been run.** `build: ./apps/api` used the app directory as
+    context, which cannot work: both apps import `packages/shared` through the pnpm workspace,
+    so **the build context must be the repo root** (`context: .` + `dockerfile:`). Also added a
+    Postgres healthcheck, a one-shot `migrate` service (spec 09 suggested exactly this) that
+    `api` waits on via `service_completed_successfully`, and explicit env.
+  - The web image builds the SPA and serves it with nginx, whose config has a
+    `try_files … /index.html` fallback — without it, refreshing on `/projects/<id>/board`
+    would 404. `VITE_API_URL` is a build arg because Vite inlines env at build time, and it
+    points at the **host** port since the browser resolves it, not the container.
+  - **E2E specs run inside the seeded projects (VEG, ATL) rather than creating their own.**
+    The first version created a project per run — but there is no `DELETE /projects` endpoint,
+    so they accumulated and eventually collided on `key_prefix`. **18 junk projects from that
+    version were cleaned out of the dev database.** Working inside a known-empty seeded project
+    is repeatable, since `db:seed` is idempotent.
+  - `E2E_CHANNEL=chrome` runs the suite against an installed Google Chrome locally; CI installs
+    Playwright's bundled Chromium. Workers are pinned to 1 — the specs share one database, so
+    parallel workers would race and produce flaky failures.
+- **Verification performed** (every CI stage was run locally, not just written):
+  - `pnpm run typecheck` — 4 tasks clean. `pnpm run lint` — **0 errors**, 5 annotated warnings.
+    `pnpm run test` — 64 api + 56 web. `pnpm run build` — 3 tasks clean.
+  - `pnpm run test:integration` — **55 tests** against the Compose Postgres.
+  - `docker build` for both images: the API image **failed first** on a multi-source `COPY`
+    where only the first path was absolute — fixed, and both images now build.
+  - **`docker compose up -d --build` brought the whole stack up for the first time ever**:
+    postgres healthy → `migrate` applied and exited 0 → api → web. Verified against the
+    *containerised* stack: `/health` 200, Swagger 200, SPA root 200, and a **deep link
+    `/projects/x/board` 200, proving the nginx SPA fallback**; the API returned all 8 users
+    and 3 projects. (The migrate log's Postgres lines are `NOTICE` "already exists, skipping",
+    not errors — it is correctly idempotent.)
+  - **`pnpm run test:e2e` — all 5 specs pass against the containerised stack**, covering spec
+    09's happy path (create → list → drag on board → edit detail → comment → Developer cannot
+    delete → Manager deletes) and its two priority areas: multi-project isolation and
+    status-by-type validation, each checked in the UI *and* directly against the API to prove
+    the server is the control.
+  - **The e2e suite was checked for teeth**: deliberately breaking one assertion made it fail
+    with the real page contents, confirming the fast (~2s) run time is genuine and not the
+    suite silently skipping work.
+  - Database restored afterwards: 3 projects, 8 users, 9 sprints, and only the 8 Nimbus demo
+    tickets.
+- **Known gaps, deliberately not closed**:
+  - No deployment stage — spec 09 says hosting is undecided; the pipeline stops at
+    "build succeeds and tests pass".
+  - Frontend tests are Vitest-only; spec 09 mentions Testing Library, but the logic worth
+    testing (dirty-state, URL-param sync, payload building, board rules) was extracted into
+    pure functions and is covered there, with rendering covered by the e2e suite instead.
+  - `db:seed` is still manual in Compose (`docker compose run --rm migrate pnpm run db:seed`),
+    matching spec 09, which only asks for migrations to be automated.
 
 ## Completion (Phase 5)
 <!-- Written once, when all modules are done. -->

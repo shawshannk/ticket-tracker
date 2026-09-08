@@ -2,7 +2,7 @@ import type { CommentWithAuthor } from '@ticket-tracker/shared';
 import { useState } from 'react';
 import { useAddComment } from '../../api/queries';
 import { relativeTime } from '../../components/relativeTime';
-import { initials, useDismissable } from '../../layout/useDismissable';
+import { initials } from '../../layout/useDismissable';
 import { useActingUserStore } from '../../store/actingUser';
 import { useUsers } from '../../api/queries';
 

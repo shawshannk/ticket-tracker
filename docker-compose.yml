@@ -7,15 +7,49 @@ services:
       POSTGRES_PASSWORD: dev_only_password
     ports: ["5432:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
+    # api/migrate wait for readiness, not just for the container to exist.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticket_tracker -d ticket_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: applies migrations then exits (spec 09). Seeding stays manual —
+  # `docker compose run --rm migrate pnpm run db:seed`.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgres://ticket_tracker:dev_only_password@postgres:5432/ticket_tracker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["pnpm", "run", "db:migrate"]
 
   api:
-    build: ./apps/api
-    env_file: ./apps/api/.env
-    depends_on: [postgres]
+    # Context is the repo root: the API imports packages/shared via the pnpm workspace.
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgres://ticket_tracker:dev_only_password@postgres:5432/ticket_tracker
+      WEB_ORIGIN: http://localhost:5173
+      PORT: 3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports: ["3000:3000"]
 
   web:
-    build: ./apps/web
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # The browser resolves this, so it must be the host-published API port.
+        VITE_API_URL: http://localhost:3000
     depends_on: [api]
     ports: ["5173:5173"]
 

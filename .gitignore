@@ -34,3 +34,7 @@ npm-debug.log*
 
 # Drizzle
 drizzle/meta/_journal.json.bak
+
+# Playwright
+test-results/
+playwright-report/

@@ -7,7 +7,6 @@ import {
   TICKET_SIZES,
   TICKET_TYPES,
   TYPE_COLORS,
-  type TicketType,
 } from '@ticket-tracker/shared';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useCreateTicket, useSprints, useTickets, useUsers } from '../../api/queries';
