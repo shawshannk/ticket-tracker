@@ -15,6 +15,7 @@ function contextFor(required: readonly UserRole[] | undefined, role: UserRole | 
           email: 'test@nimbus.io',
           department: 'Engineering',
           role,
+          status: 'active',
           createdAt: new Date().toISOString(),
         };
 

@@ -4,7 +4,8 @@ import { changedFields, emptyUserForm, formFromUser, validate } from './userForm
 
 const user = (over: Partial<User> = {}): User => ({
   id: 'u1', name: 'Marcus Chen', email: 'marcus.chen@nimbus.io',
-  department: 'Backend', role: 'developer', createdAt: '2026-07-29T00:00:00Z', ...over,
+  department: 'Backend', role: 'developer', status: 'active',
+  createdAt: '2026-07-29T00:00:00Z', ...over,
 });
 
 describe('user form validation', () => {

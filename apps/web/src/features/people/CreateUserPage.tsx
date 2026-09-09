@@ -36,10 +36,66 @@ export function CreateUserPage() {
     setSubmitted(true);
     if (Object.keys(errors).length > 0) return;
     create.mutate(form as UserCreateDto, {
-      onSuccess: (user) =>
-        navigate({ to: '/projects/$projectId/people/$userId', params: { projectId, userId: user.id } }),
+      // Deliberately does *not* navigate away. The invite link comes back exactly once and is
+      // stored only as a digest, so leaving this page would strand an account nobody can
+      // activate (spec 10 §4.1). The link is rendered below instead.
+      onSuccess: () => setSubmitted(false),
     });
   };
+
+  // Success state: the invite link, shown once. There is no mail transport, so passing it on
+  // is the admin's job and this panel is the only place it exists (spec 10 §4.1).
+  if (create.isSuccess) {
+    const { user, inviteUrl, inviteExpiresAt } = create.data;
+    return (
+      <div className="max-w-[560px] px-8 pb-14 pt-[30px]">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-[26px]">
+          <h2 className="text-[15px] font-semibold text-emerald-900">{user.name} was created</h2>
+          <p className="mt-1.5 text-[13px] text-emerald-800">
+            They cannot sign in until they open this link and set a password. Send it to them
+            now — <strong>it is shown only once</strong> and cannot be retrieved later. It expires{' '}
+            {new Date(inviteExpiresAt).toLocaleDateString()}.
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded-lg border border-emerald-200 bg-white px-3 py-2 text-[12px] text-slate-700">
+              {inviteUrl}
+            </code>
+            <button
+              type="button"
+              onClick={() => void navigator.clipboard?.writeText(inviteUrl)}
+              className="flex-none rounded-lg border border-emerald-300 bg-white px-3 py-2 text-[12.5px] font-semibold text-emerald-800 hover:bg-emerald-100"
+            >
+              Copy
+            </button>
+          </div>
+          <div className="mt-[22px] flex gap-2.5 border-t border-emerald-200 pt-[18px]">
+            <button
+              type="button"
+              onClick={() =>
+                navigate({
+                  to: '/projects/$projectId/people/$userId',
+                  params: { projectId, userId: user.id },
+                })
+              }
+              className="rounded-lg bg-emerald-700 px-[18px] py-2.5 text-[13px] font-semibold text-white hover:bg-emerald-800"
+            >
+              Done
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                create.reset();
+                setForm(emptyUserForm());
+              }}
+              className="rounded-lg border border-emerald-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-emerald-800 hover:bg-emerald-100"
+            >
+              Add another
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-[520px] px-8 pb-14 pt-[30px]">

@@ -36,6 +36,14 @@ services:
       DATABASE_URL: postgres://ticket_tracker:dev_only_password@postgres:5432/ticket_tracker
       WEB_ORIGIN: http://localhost:5173
       PORT: 3000
+      # Required since M16 — the API refuses to boot without it. A fixed value is fine here
+      # precisely because this file is development-only; a real deployment must supply its own,
+      # and changing it signs everyone out.
+      AUTH_JWT_SECRET: compose_dev_only_secret_at_least_32_bytes_long_xxxxx
+      # v1's X-Acting-User-Id still works here, which is what keeps the web app usable until
+      # M20 ships a login screen. Refused at boot if NODE_ENV=production.
+      AUTH_DEV_IMPERSONATION: "true"
+      NODE_ENV: development
     depends_on:
       postgres:
         condition: service_healthy

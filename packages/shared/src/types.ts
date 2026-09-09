@@ -1,5 +1,14 @@
 import { z } from 'zod';
-import type { Department, TicketEnv, TicketPriority, TicketSeverity, TicketSize, TicketType, UserRole } from './enums';
+import type {
+  Department,
+  TicketEnv,
+  TicketPriority,
+  TicketSeverity,
+  TicketSize,
+  TicketType,
+  UserRole,
+  UserStatus,
+} from './enums';
 import {
   bugCreateSchema,
   inviteAcceptSchema,
@@ -34,6 +43,11 @@ export interface User {
   email: string;
   department: Department;
   role: UserRole;
+  /**
+   * Account lifecycle (spec 10 §4). Exposed because the People view distinguishes an invited
+   * account from an active one, and disabling is how someone is removed.
+   */
+  status: UserStatus;
   createdAt: string;
 }
 
@@ -203,4 +217,15 @@ export interface AuthResult {
   accessToken: string;
   user: User;
   memberships: Membership[];
+}
+
+/**
+ * `POST /users` returns the account together with its invite link. The link is shown **once**
+ * and never stored in plaintext (spec 10 §4.1), so a UI that discards it leaves an account
+ * nobody can activate — the recovery is a re-issued invite, not a lookup.
+ */
+export interface UserCreatedResult {
+  user: User;
+  inviteUrl: string;
+  inviteExpiresAt: string;
 }

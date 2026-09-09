@@ -29,7 +29,7 @@ Phase 2 (M15–M21) derived from `specs/10-authentication-and-authorization.md` 
 | M14 Testing & CI | done | specs/09 (2026-07-15) | 2026-09-08 |
 | M15 Auth schema, migration & backfill | done | specs/10, docs/auth-tech-spec §2 (2026-09-09) | 2026-09-09 |
 | M16 Password, invite & token services | done | docs/auth-tech-spec §3 (2026-09-09) | 2026-09-09 |
-| M17 Auth endpoints & AuthGuard | **not started** | specs/10 §4, tech-spec §4.1 (2026-09-09) | — |
+| M17 Auth endpoints & AuthGuard | done | specs/10 §4, tech-spec §4.1 (2026-09-09) | 2026-09-09 |
 | M18 Project membership & scope guard | **not started** | specs/10 §3.2, tech-spec §5 (2026-09-09) | — |
 | M19 Record-level ownership | **not started** | specs/10 §3.3, tech-spec §5.2 (2026-09-09) | — |
 | M20 Web auth flow | **not started** | specs/10 §6, tech-spec §7 (2026-09-09) | — |
@@ -1313,3 +1313,83 @@ The credential primitives, with no HTTP surface. M17 wires them to routes.
   - Integration tests create and delete their own users; they no longer rely purely on seed data.
 
 - **Next**: M17 — auth endpoints & AuthGuard. No blockers.
+
+### M17 — Auth endpoints & AuthGuard (done, 2026-09-09)
+
+Real login exists. The app still runs on the legacy header because the web app has no login
+screen until M20 — that is what `AUTH_DEV_IMPERSONATION` is for.
+
+- **Files created**: `apps/api/src/auth/` — `auth.controller.ts`, `auth.service.ts`,
+  `auth.guard.ts`, `auth-context.ts`, `public.decorator.ts`, `current-user.decorator.ts`,
+  `cookies.ts`, `dev-impersonation.ts`, `login-throttler.guard.ts`; tests
+  `auth.int-spec.ts` (27), `cookies.spec.ts` (3), `dev-impersonation.spec.ts` (3).
+- **Files deleted**: `apps/api/src/auth/acting-user.guard.ts`.
+- **Files modified**: `auth.module.ts`, `roles.guard.ts`, `acting-user.decorator.ts`,
+  `main.ts`, `app.controller.ts`, `users.controller.ts`, `users.module.ts`,
+  `commands/{create,update}-user.command.ts`, `user.mapper.ts`,
+  `packages/shared/src/{types,schemas}.ts`, `apps/web/src/api/endpoints.ts`,
+  `apps/web/src/features/people/CreateUserPage.tsx`, `docker-compose.yml`,
+  `.github/workflows/ci.yml`, `vitest.integration.config.ts`.
+
+- **The central design decision — what the dev flag actually means.** `AUTH_DEV_IMPERSONATION`
+  does not merely accept `X-Acting-User-Id`; it restores **v1 semantics wholesale**, including
+  letting an unauthenticated request through as anonymous so `RolesGuard` can answer 403 on
+  guarded routes while open reads stay open. Anything narrower would have broken the current web
+  app immediately, and PLAN.md's phase note commits to M15–M18 keeping the app working. With the
+  flag off — the only supported production configuration — R11 applies in full: every non-public
+  route needs a verified token and the legacy header is inert. Both configurations are tested.
+
+- **Decisions and deviations**:
+  1. **Rate limiting is keyed on ip + email**, via a `LoginThrottlerGuard` subclass. The default
+     tracker keys on IP alone, which punishes everyone behind one NAT for one person's typo and
+     lets an attacker spray a whole user list from one host without tripping. This is what the
+     acceptance criterion said; the default was not it.
+  2. **`POST /users` now returns `{user, inviteUrl, inviteExpiresAt}`**, not a bare `User`. The
+     web app was updated in the same commit — it read `user.id` to navigate, which would have
+     been `undefined`.
+  3. **`CreateUserPage` no longer navigates away on success**; it shows the invite link with a
+     Copy button. This is scope pulled forward from M21, and it is not optional: the link is
+     stored only as a digest and returned once, so navigating away stranded an account nobody
+     could ever activate.
+  4. **`User` gained `status`**, and `toUser` now takes a `UserFields` projection rather than a
+     whole row, so `AuthGuard` can load a user without ever selecting `password_hash` (R17).
+  5. **`RolesGuard` and `@ActingUser()` survive untouched**, reading a `req.actingUser` mirror
+     that `AuthGuard` sets. M18 deletes both. This kept the diff to identity, not authorization.
+  6. **Login never applies the password policy** — only invite-accept and password-change do.
+  7. **Integration tests now transform with SWC** (`unplugin-swc`). See gotchas.
+
+- **Verification**:
+  | Check | Result |
+  |---|---|
+  | API unit | 101 passed (was 95) |
+  | API integration | 100 passed (was 73) |
+  | Web unit | 56 passed, unchanged |
+  | typecheck / lint | clean (5 pre-existing web warnings) |
+  | **e2e, unchanged, against a rebuilt Compose stack** | **5/5 passed** |
+  | Boot: `NODE_ENV=production` + `AUTH_DEV_IMPERSONATION=true` | exits 1, refuses to start |
+  | Production config: `/health` 200, `/users` 401, legacy header 401 | as specified (R11) |
+  | Dev config: anonymous reads 200, developer epic-create 403, admin-only 403 | v1 behaviour intact |
+  | Login failure uniformity (unknown / wrong / invited / disabled) | one status, one message |
+  | Rate limit, guard left in place | 10× 401 then 429; a different email is unaffected |
+  | Disable account → live token stops working on the next request | verified (R15) |
+
+- **Gotchas for the next session (M18)**:
+  - **Vitest needed `unplugin-swc` to boot Nest.** esbuild emits no `design:paramtypes`, so every
+    injected dependency was `undefined` and all 22 HTTP tests failed identically. Only
+    `vitest.integration.config.ts` has the plugin; the unit config does not need it because unit
+    tests construct their subjects by hand. If M18's guard tests boot the app, use the
+    integration config.
+  - **The throttler is real and will bite test suites.** The auth suite gives each login a
+    distinct `X-Forwarded-For` and enables `trust proxy`, rather than weakening the limit. Any
+    new suite that logs in repeatedly must do the same.
+  - **Do not throw inside `db.transaction`** — see M16's handoff. `AuthService.acceptInvite` and
+    `changePassword` deliberately do their revocation outside the invite transaction.
+  - `AuthGuard` costs one user lookup + one session check per request. That is what makes R15
+    true; M18's `ProjectScopeGuard` adds a third query on ticket routes. If that becomes a
+    problem, batch them in one guard rather than caching across requests.
+  - `req.auth.projectId` / `projectRole` are already declared on `AuthContext` and unset — M18
+    fills them in.
+  - `docker-compose.yml` and CI now set `AUTH_JWT_SECRET` and `AUTH_DEV_IMPERSONATION=true`.
+    Turning the flag off in Compose before M20 will make the web app unusable, by design.
+
+- **Next**: M18 — project membership & scope guard. No blockers.

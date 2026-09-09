@@ -37,7 +37,7 @@ describe('toUser', () => {
 
   it('emits exactly the public User fields', () => {
     expect(Object.keys(toUser(row)).sort()).toEqual(
-      ['createdAt', 'department', 'email', 'id', 'name', 'role'].sort(),
+      ['createdAt', 'department', 'email', 'id', 'name', 'role', 'status'].sort(),
     );
   });
 

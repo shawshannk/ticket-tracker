@@ -7,6 +7,7 @@ import {
   TICKET_SIZES,
   TICKET_TYPES,
   USER_ROLES,
+  USER_STATUSES,
 } from './enums';
 
 export const userRoleSchema = z.enum(USER_ROLES);
@@ -52,7 +53,13 @@ export const userCreateSchema = z.object({
   role: userRoleSchema,
 });
 
-export const userUpdateSchema = userCreateSchema.partial();
+/**
+ * `status` is updatable but not creatable: a new account is always `invited` until its invite is
+ * accepted, so accepting it on create would let an admin mint an active account with no password.
+ */
+export const userUpdateSchema = userCreateSchema.partial().extend({
+  status: z.enum(USER_STATUSES).optional(),
+});
 
 // --- Projects ---
 

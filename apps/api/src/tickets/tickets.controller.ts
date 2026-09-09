@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
-import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   boardQuerySchema,
   commentCreateSchema,
@@ -22,7 +22,6 @@ import {
   type TicketUpdateDto,
   type User,
 } from '@ticket-tracker/shared';
-import { ACTING_USER_HEADER } from '../auth/acting-user.guard';
 import { ActingUser } from '../auth/acting-user.decorator';
 import { PERMISSIONS } from '../auth/permissions';
 import { Roles } from '../auth/roles.decorator';
@@ -86,7 +85,7 @@ export class TicketsController {
   @Post('projects/:projectId/tickets')
   @Roles(...PERMISSIONS.writeTicket)
   @ApiOperation({ summary: 'Create a ticket (Epic requires Admin or Manager)' })
-  @ApiHeader({ name: ACTING_USER_HEADER, required: true })
+  @ApiBearerAuth()
   create(
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body(new ZodValidationPipe(ticketCreateSchema)) body: TicketCreateDto,
@@ -99,7 +98,7 @@ export class TicketsController {
   @Patch('tickets/:id')
   @Roles(...PERMISSIONS.writeTicket)
   @ApiOperation({ summary: 'Update a ticket' })
-  @ApiHeader({ name: ACTING_USER_HEADER, required: true })
+  @ApiBearerAuth()
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(ticketUpdateSchema)) body: TicketUpdateDto,
@@ -111,7 +110,7 @@ export class TicketsController {
   @Patch('tickets/:id/status')
   @Roles(...PERMISSIONS.writeTicket)
   @ApiOperation({ summary: "Move a ticket's status" })
-  @ApiHeader({ name: ACTING_USER_HEADER, required: true })
+  @ApiBearerAuth()
   moveStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(moveTicketStatusSchema)) body: MoveTicketStatusDto,
@@ -124,7 +123,7 @@ export class TicketsController {
   @Roles(...PERMISSIONS.deleteTicket)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a ticket (Admin or Manager only)' })
-  @ApiHeader({ name: ACTING_USER_HEADER, required: true })
+  @ApiBearerAuth()
   remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.commandBus.execute(new DeleteTicketCommand(id));
   }
@@ -133,7 +132,7 @@ export class TicketsController {
   @Post('tickets/:id/comments')
   @Roles(...PERMISSIONS.writeTicket)
   @ApiOperation({ summary: 'Add a comment' })
-  @ApiHeader({ name: ACTING_USER_HEADER, required: true })
+  @ApiBearerAuth()
   addComment(
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(commentCreateSchema)) body: CommentCreateDto,

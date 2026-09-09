@@ -16,6 +16,7 @@ import type {
   TicketUpdateDto,
   User,
   UserCreateDto,
+  UserCreatedResult,
   UserUpdateDto,
 } from '@ticket-tracker/shared';
 import { apiFetch } from './client';
@@ -30,7 +31,7 @@ export const api = {
     list: () => apiFetch<User[]>('/users'),
     get: (id: string) => apiFetch<User>(`/users/${id}`),
     create: (body: UserCreateDto, actingUserId: string | null) =>
-      apiFetch<User>('/users', { method: 'POST', body, actingUserId }),
+      apiFetch<UserCreatedResult>('/users', { method: 'POST', body, actingUserId }),
     update: (id: string, body: UserUpdateDto, actingUserId: string | null) =>
       apiFetch<User>(`/users/${id}`, { method: 'PATCH', body, actingUserId }),
   },

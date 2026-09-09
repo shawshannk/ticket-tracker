@@ -1,8 +1,7 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
-import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { projectCreateSchema, type Project, type ProjectCreateDto, type Sprint } from '@ticket-tracker/shared';
-import { ACTING_USER_HEADER } from '../auth/acting-user.guard';
 import { PERMISSIONS } from '../auth/permissions';
 import { Roles } from '../auth/roles.decorator';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
@@ -43,7 +42,7 @@ export class ProjectsController {
   @Post()
   @Roles(...PERMISSIONS.manageProjects)
   @ApiOperation({ summary: 'Create a project (Admin only)' })
-  @ApiHeader({ name: ACTING_USER_HEADER, required: true })
+  @ApiBearerAuth()
   create(@Body(new ZodValidationPipe(projectCreateSchema)) body: ProjectCreateDto): Promise<Project> {
     return this.commandBus.execute(new CreateProjectCommand(body));
   }

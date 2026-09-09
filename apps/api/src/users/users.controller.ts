@@ -1,12 +1,14 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
-import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { userCreateSchema, userUpdateSchema, type User, type UserCreateDto, type UserUpdateDto } from '@ticket-tracker/shared';
-import { ACTING_USER_HEADER } from '../auth/acting-user.guard';
+import { ApiBearerAuth } from '@nestjs/swagger';
+import type { AuthContext } from '../auth/auth-context';
+import { Auth } from '../auth/current-user.decorator';
 import { PERMISSIONS } from '../auth/permissions';
 import { Roles } from '../auth/roles.decorator';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
-import { CreateUserCommand } from './commands/create-user.command';
+import { CreateUserCommand, type CreatedUser } from './commands/create-user.command';
 import { UpdateUserCommand } from './commands/update-user.command';
 import { GetUserQuery } from './queries/get-user.query';
 import { GetUsersQuery } from './queries/get-users.query';
@@ -33,22 +35,30 @@ export class UsersController {
     return this.queryBus.execute(new GetUserQuery(id));
   }
 
+  /**
+   * Creates the account **and** its invite link, returned once (spec 10 §4.1). The account is
+   * `invited` until that link is accepted, so it cannot log in before then.
+   */
   @Post()
   @Roles(...PERMISSIONS.manageUsers)
-  @ApiOperation({ summary: 'Create a user (Admin only)' })
-  @ApiHeader({ name: ACTING_USER_HEADER, required: true })
-  create(@Body(new ZodValidationPipe(userCreateSchema)) body: UserCreateDto): Promise<User> {
-    return this.commandBus.execute(new CreateUserCommand(body));
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a user and issue an invite link (Admin only)' })
+  create(
+    @Body(new ZodValidationPipe(userCreateSchema)) body: UserCreateDto,
+    @Auth() auth: AuthContext,
+  ): Promise<CreatedUser> {
+    return this.commandBus.execute(new CreateUserCommand(body, auth.user.id));
   }
 
   @Patch(':id')
   @Roles(...PERMISSIONS.manageUsers)
-  @ApiOperation({ summary: 'Update a user (Admin only)' })
-  @ApiHeader({ name: ACTING_USER_HEADER, required: true })
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update a user, including disabling them (Admin only)' })
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(userUpdateSchema)) body: UserUpdateDto,
+    @Auth() auth: AuthContext,
   ): Promise<User> {
-    return this.commandBus.execute(new UpdateUserCommand(id, body));
+    return this.commandBus.execute(new UpdateUserCommand(id, body, auth.user.id));
   }
 }

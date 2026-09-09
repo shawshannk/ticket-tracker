@@ -24,6 +24,7 @@ describe('CreateTicketHandler (integration)', () => {
     email: `${role}@nimbus.io`,
     department: 'Engineering',
     role,
+    status: 'active',
     createdAt: new Date().toISOString(),
   });
 

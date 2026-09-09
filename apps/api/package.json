@@ -20,8 +20,10 @@
     "@nestjs/cqrs": "^10.2.8",
     "@nestjs/platform-express": "^10.4.15",
     "@nestjs/swagger": "^8.1.0",
+    "@nestjs/throttler": "^6.5.0",
     "@ticket-tracker/shared": "workspace:*",
     "argon2": "^0.45.1",
+    "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "jsonwebtoken": "^9.0.3",
@@ -34,12 +36,17 @@
     "@nestjs/cli": "^10.4.9",
     "@nestjs/schematics": "^10.2.3",
     "@nestjs/testing": "^10.4.15",
+    "@swc/core": "^1.16.2",
+    "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.10.2",
+    "@types/supertest": "^7.2.1",
     "drizzle-kit": "^0.31.10",
+    "supertest": "^7.2.2",
     "tsx": "^4.23.1",
     "typescript": "^5.7.2",
+    "unplugin-swc": "^1.6.0",
     "vitest": "^2.1.8"
   }
 }

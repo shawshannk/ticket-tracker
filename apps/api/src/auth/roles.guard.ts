@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { UserRole } from '@ticket-tracker/shared';
-import { ACTING_USER_HEADER, type RequestWithActingUser } from './acting-user.guard';
+import type { RequestWithAuth } from './auth-context';
 import { ROLES_KEY } from './roles.decorator';
 
 /**
@@ -23,10 +23,10 @@ export class RolesGuard implements CanActivate {
       return true;
     }
 
-    const { actingUser } = ctx.switchToHttp().getRequest<RequestWithActingUser>();
+    const { actingUser } = ctx.switchToHttp().getRequest<RequestWithAuth>();
 
     if (!actingUser) {
-      throw new ForbiddenException(`This action requires the ${ACTING_USER_HEADER} header`);
+      throw new ForbiddenException('This action requires an authenticated user');
     }
 
     if (!required.includes(actingUser.role)) {

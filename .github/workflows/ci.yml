@@ -8,6 +8,12 @@ on:
 env:
   # Same credentials the Compose Postgres uses, so local and CI behave identically.
   DATABASE_URL: postgres://ticket_tracker:dev_only_password@localhost:5432/ticket_tracker
+  # Required since M16: TokenService refuses to construct without it, so the API cannot boot
+  # and the auth integration tests cannot run. Throwaway value — CI holds no real sessions.
+  AUTH_JWT_SECRET: ci_only_secret_at_least_32_bytes_long_padding_xxxxx
+  # The auth suite switches this off for itself; the e2e suite still needs it on until M20
+  # gives the web app a login screen.
+  AUTH_DEV_IMPERSONATION: "true"
 
 jobs:
   # Fast feedback: everything that doesn't need a database.
