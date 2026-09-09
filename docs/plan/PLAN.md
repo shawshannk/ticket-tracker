@@ -189,9 +189,110 @@ specs win on conflict. Resolved conflicts: D-key (per-project keys) and R10 (vie
 - **Acceptance criteria**: E2E covers create → list → drag on board → edit detail → comment → delete as Manager → confirm Developer cannot delete; CI runs typecheck → lint → unit → integration → build (e2e as a separate job).
 - **Depends on**: M8–M13
 
+## Phase 2 — Real authentication & authorization
+
+Derived from `specs/10-authentication-and-authorization.md` (2026-09-09) and
+`docs/auth-tech-spec.md`. Supersedes spec 08's acting-as mechanism.
+
+Dependency order: M15 → M16 → M17 → M18 → M19 → M20 → M21.
+Backend first, and in this order for a reason: the schema must exist before tokens can be
+issued, tokens before scoping can be enforced, and the whole API must be enforcing before the
+web app stops sending `X-Acting-User-Id`. `AUTH_DEV_IMPERSONATION=true` holds the app working
+end-to-end through M15–M18; M19 is the first module that breaks the old client, and M21 is the
+first that may ship with the flag off.
+
+### M15: Auth schema, migration & backfill (M)
+- **Goal**: Every table and column real auth needs, plus a backfill that preserves today's access exactly.
+- **Source spec**: docs/auth-tech-spec.md §2
+- **Files**: `apps/api/src/db/schema/users.ts` (add `status`, `password_hash`, `password_changed_at`, `last_login_at`), new `project-members.ts`, `refresh-tokens.ts`, `invites.ts`, `auth-events.ts`, `apps/api/src/db/schema/index.ts`, generated migration under `apps/api/drizzle/`, `apps/api/src/db/seed.ts`.
+- **Acceptance criteria**:
+  - `drizzle-kit generate` + `migrate` apply cleanly to a database holding v1 data.
+  - Backfill inserts one `project_members` row per (project × user) with the user's global role, so no existing access is removed.
+  - Seed creates the 8 users as `active` with an argon2id hash of a documented dev password, and every user as a member of every seeded project.
+  - `toUser()` has a unit test asserting no password material appears in its output (R17).
+- **Depends on**: —
+
+### M16: Password, invite & token services (M)
+- **Goal**: The credential primitives, with no HTTP surface yet — pure units, exhaustively tested.
+- **Source spec**: docs/auth-tech-spec.md §3, §5.1; spec 10 §5.1
+- **Files**: `apps/api/src/auth/password.service.ts` (argon2id hash/verify, policy check), `apps/api/src/auth/token.service.ts` (JWT sign/verify, opaque refresh generation + sha256), `apps/api/src/auth/session.service.ts` (issue / rotate / revoke / revoke-family / revoke-all-for-user), `apps/api/src/auth/invite.service.ts`, `apps/api/src/auth/audit.service.ts`, `packages/shared/src/schemas.ts` (login, password-change, invite-accept schemas).
+- **Acceptance criteria**:
+  - Password policy: ≥12 chars, rejects email local-part and the bundled common list.
+  - Rotation marks the old token used and issues a new one in the same family, inside one transaction with `FOR UPDATE`.
+  - Presenting a used token revokes the whole family and writes a `refresh_reuse` audit event (R16) — an integration test proves it.
+  - `AUTH_JWT_SECRET` shorter than 32 bytes, or absent, fails at construction.
+- **Depends on**: M15
+
+### M17: Auth endpoints & AuthGuard (L)
+- **Goal**: Real login. Every route authenticated, with the dev-impersonation escape hatch.
+- **Source spec**: docs/auth-tech-spec.md §4.1, §5.1, §6.8; spec 10 §4.2–4.4
+- **Files**: `apps/api/src/auth/auth.controller.ts`, `auth.guard.ts` (replaces `acting-user.guard.ts`), `public.decorator.ts`, `auth-context.ts`, `auth.module.ts`, `apps/api/src/main.ts` (CORS credentials, bearer in Swagger, boot-time impersonation check), `apps/api/src/app.controller.ts` (`@Public()` health).
+- **Acceptance criteria**:
+  - `POST /auth/login|refresh|logout|password`, `GET /auth/me|sessions`, `DELETE /auth/sessions/:id`, `POST /auth/invite/accept` behave per the tech spec's table.
+  - Refresh cookie is `HttpOnly; SameSite=Lax; Path=/auth`, and `Secure` outside development.
+  - Login failures are uniform across unknown email / wrong password / invited / disabled, and a dummy hash is verified for unknown emails so timing does not disclose existence.
+  - Disabling an account or changing a password revokes sessions and takes effect on the very next request (R15).
+  - Throttling: 10 login attempts per 15 minutes per ip+email.
+  - The process **exits at boot** if `AUTH_DEV_IMPERSONATION=true` with `NODE_ENV=production`.
+  - With the flag on, every existing integration test still passes unchanged.
+- **Depends on**: M16
+
+### M18: Project membership & scope guard (L)
+- **Goal**: Per-project roles enforced, and non-members unable to detect a project exists.
+- **Source spec**: docs/auth-tech-spec.md §5, §6.1–6.3; spec 10 §3.2, R12/R13
+- **Files**: `packages/shared/src/permissions.ts` (`PLATFORM_PERMISSIONS`, `PROJECT_PERMISSIONS`, `effectiveRole`), `apps/api/src/auth/project-scope.guard.ts`, `permission.guard.ts` (replaces `roles.guard.ts`), `project-scope.decorator.ts`, `require.decorator.ts`, `apps/api/src/projects/members.controller.ts` + CQRS handlers, and every existing controller (decorator swap).
+- **Acceptance criteria**:
+  - `effectiveRole()` truth table covered exhaustively in unit tests, including the global-admin bypass.
+  - A non-member gets `404` for `GET /projects/:id`, its tickets, board, overview, sprints, **and** for `GET /tickets/:id` addressed directly (R12).
+  - A global manager who is a project developer cannot create an epic there; a global developer who is a project manager can (R13). Both directions tested.
+  - `GET /projects` returns only the caller's memberships — a query-level filter, not a guard (tech spec §6.3).
+  - Member add/update/remove works; removing or demoting the last project admin is refused (R18).
+  - `PERMISSIONS`/`can()` call sites in `apps/web` compile against the new signatures.
+- **Depends on**: M17
+
+### M19: Record-level ownership & comment editing (M)
+- **Goal**: The rules that need the row, enforced where the row is loaded.
+- **Source spec**: docs/auth-tech-spec.md §5.2–5.3; spec 10 §3.3, R14
+- **Files**: `apps/api/src/auth/ownership.ts`, `apps/api/src/tickets/commands/delete-ticket.command.ts`, `update-ticket.command.ts`, new `update-comment.command.ts` + `delete-comment.command.ts`, `apps/api/src/tickets/comments.controller.ts`, all command constructors (`actingUser: User` → `auth: AuthContext`).
+- **Acceptance criteria**:
+  - A project developer may delete a ticket they reported, and may not delete one they did not.
+  - A developer may reassign a ticket where they are reporter or assignee, and not otherwise.
+  - `PATCH /comments/:id` succeeds only for the author — **including** a refusal for a project admin — and `DELETE /comments/:id` succeeds for author or project admin.
+  - Every `assertCan*` has a unit test with a hand-built `AuthContext`, in the style of `roles.guard.spec.ts`.
+- **Depends on**: M18
+
+### M20: Web auth flow (L)
+- **Goal**: A real login screen; acting-as deleted from the frontend.
+- **Source spec**: docs/auth-tech-spec.md §7; spec 10 §6
+- **Files**: new `apps/web/src/auth/*` (`AuthProvider`, `tokenStore`, `LoginPage`, `AcceptInvitePage`, `SessionsPage`, `useCan`), `apps/web/src/api/client.ts` + `endpoints.ts` (bearer, credentials, single-flight refresh, drop every `actingUserId` param), `router.tsx`, `layout/AppShell.tsx`, `Sidebar.tsx`, `ProjectSwitcher.tsx`; **deleted**: `store/actingUser.ts`, `layout/ActingUserMenu.tsx`; updated consumers in `features/ticket-detail/*`, `features/board/useOptimisticMove.ts`, `features/create-ticket/*`, `features/people/*`.
+- **Acceptance criteria**:
+  - Unauthenticated access to any route redirects to `/login` and returns to the intended page after signing in.
+  - A reload does not flash the login page: bootstrap refreshes once before first paint.
+  - Ten simultaneous 401s trigger exactly **one** refresh request (a single shared in-flight promise) — unit-tested, because getting this wrong looks like token theft to M16's reuse detection.
+  - The project switcher lists only the user's memberships; a user with none sees the explicit empty state.
+  - Account menu offers change password, sessions, log out, log out everywhere.
+  - No reference to `X-Acting-User-Id` or `ticket-tracker.acting-user` remains in `apps/web`.
+- **Depends on**: M19
+
+### M21: Members UI, invites, hardening & cutover (M)
+- **Goal**: Admin-facing management, the security headers spec 10 §8 promises, and the flag off.
+- **Source spec**: spec 10 §4.1, §4.5, §6; docs/auth-tech-spec.md §7, §9
+- **Files**: `apps/web/src/features/people/*` (invite link display, disable/enable, email visibility by viewer), new `apps/web/src/features/project-settings/Members*.tsx`, `apps/web/nginx.conf` (CSP), `docker-compose.yml` + `.github/workflows/ci.yml` (auth env), `e2e/auth.spec.ts`, `e2e/fixtures.ts` (real login helper), `README.md`.
+- **Acceptance criteria**:
+  - An admin creates a user, sees the invite link once, and a second browser accepts it and lands logged in — covered end-to-end.
+  - Members table adds/removes/re-roles; refuses removing the last project admin.
+  - E2E logs in for real (no impersonation) and covers: developer sees no Epic option and no Delete on someone else's ticket; a non-member navigating to a project URL sees "not found"; logout returns to `/login` and the back button does not restore the app.
+  - CSP is served and the app runs with no inline-script violations.
+  - CI passes with `AUTH_DEV_IMPERSONATION` unset for the auth e2e job.
+- **Depends on**: M20
+
 ## Backlog
 <!-- Parked ideas from mid-build. One line each, dated. Triaged at Phase 5. -->
 - 2026-07-15: Full ~20-row prototype seed dataset (deferred; minimal seed chosen for v1).
-- 2026-07-15: User deletion strategy (soft-delete / reassign / block) — spec 07 defers.
-- 2026-07-15: Per-project team membership (`project_members` join table) — additive, future.
+- 2026-07-15: User deletion strategy (soft-delete / reassign / block) — **closed 2026-09-09**: resolved as *disable, never delete* in spec 10 §4.4; built in M17/M21.
+- 2026-07-15: Per-project team membership (`project_members` join table) — **closed 2026-09-09**: specified in spec 10 §3.2, built in M18.
 - 2026-07-15: Sprint CRUD UI (sprints exist in the model; no management UI spec'd yet).
+- 2026-09-09: Retention/cleanup job for expired `refresh_tokens`, `invites`, `auth_events` (tech spec §10).
+- 2026-09-09: JWT signing-key rotation with overlapping keys (`kid` claims) — single secret today.
+- 2026-09-09: Shared-store rate limiting and session cache for multi-instance deploys.
+- 2026-09-09: SSO/OIDC as an alternative token issuer (spec 10 §9) — seam left, no work planned.

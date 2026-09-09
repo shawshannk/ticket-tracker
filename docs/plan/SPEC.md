@@ -27,7 +27,9 @@ Where reference and spec disagreed, resolved with the user (see D-key, R10 below
 | Ticket detail | specs/05-ticket-detail.md | 2026-07-15 |
 | Create ticket | specs/06-create-ticket.md | 2026-07-15 |
 | People & users | specs/07-people-and-users.md | 2026-07-15 |
-| Acting-as & permissions | specs/08-current-user-and-permissions.md | 2026-07-15 |
+| Acting-as & permissions (v1, superseded) | specs/08-current-user-and-permissions.md | 2026-07-15 |
+| **Authentication & authorization (v2)** | specs/10-authentication-and-authorization.md | 2026-09-09 |
+| **Auth technical design (v2)** | docs/auth-tech-spec.md | 2026-09-09 |
 | Testing & devops | specs/09-testing-and-devops.md | 2026-07-15 |
 
 <!-- Fingerprint = last-modified date of the spec file at the time PLAN.md was
@@ -92,19 +94,38 @@ The things no single spec file owns. A change here affects every dependent modul
 ## Constraints
 - No real authentication in v1 — "acting as" header only. See spec 08 for the honest security
   caveat: this is role *simulation*, not access control. Safe only for a trusted team / demo.
+  **Addressed in v2**: spec 10 replaces it with real auth; the v1 constraint holds until M21
+  ships and `AUTH_DEV_IMPERSONATION` is off.
 - Cloud hosting target not decided; pipeline stops at "build succeeds + tests pass".
 - Should stay visually close to the original prototype.
 
 ## Out of scope (v1)
-- Real auth (JWT/SSO), file attachments, email/notifications, real-time websocket sync.
+- ~~Real auth (JWT)~~ — **moved into scope 2026-09-09**, see spec 10 and PLAN.md M15–M21.
+- SSO/OIDC, MFA, self-signup, password reset by email, file attachments, notifications,
+  real-time websocket sync. (Spec 10 §2 restates these as explicitly out of scope, with reasons.)
 - User deletion (spec 07 defers the soft-delete/reassign decision).
-- Per-project team membership (users are global; a `project_members` join table is an
-  additive future change, not a rework).
+- ~~Per-project team membership~~ — **in scope as of 2026-09-09** (spec 10 §3.2, D-scope,
+  PLAN.md M18). Users remain globally unique; `project_members` adds a per-project role.
 
 ## Decisions
 <!-- Promoted from module handoffs when a decision outlives its module. -->
 - **D-auth** (2026-07-15, from spec 08): Acting user via `X-Acting-User-Id` header, one NestJS
   guard + `@Roles()` decorator centralizes enforcement so real auth later is a contained swap.
+  **Superseded 2026-09-09 by D-auth2.** The header survives only as `AUTH_DEV_IMPERSONATION`,
+  refused at boot in production.
+- **D-auth2** (2026-09-09, from spec 10 — decided with the user): real authentication replaces
+  role simulation. Email + password with argon2id; a 15-minute HS256 access token in memory and
+  a rotating opaque refresh token in an `HttpOnly` cookie scoped to `/auth`, with reuse detection.
+  Accounts are admin-created and activated through a single-use invite link; there is no
+  self-signup and no email transport, so a password reset *is* a re-issued invite. Accounts are
+  disabled, never deleted, so authorship history stays readable.
+- **D-scope** (2026-09-09, from spec 10 §3): authorization has two scopes. The **global role**
+  governs platform actions only; a **`project_members` role overrides it inside that project**.
+  A global `admin` is a platform superuser who bypasses membership everywhere. A non-member sees
+  `404`, never `403`, so project existence cannot be probed.
+- **D-ownership** (2026-09-09, from spec 10 §3.3): editing tickets stays open to every project
+  member; **assignment and deletion** additionally admit the reporter/assignee; a comment may be
+  edited **only by its author**, admins included, and deleted by author or project admin.
 - **D-status** (2026-07-15, from spec 00): `STATUS_BY_TYPE` canonical in `packages/shared`;
   both API validation and web UI options derive from it.
 - **D-key** (2026-07-15, reference vs spec conflict resolved by user): ticket keys use a
@@ -123,3 +144,17 @@ The things no single spec file owns. A change here affects every dependent modul
   `seedUsers()`; project "Nimbus Triage" with `key_prefix = "NIM"`.
 - **Ticket key format** (D-key): per-project single sequence (`NIM-1`), not per-type prefixes.
 - **View-preference toggles** (R10): `showHierarchy` + `tagStyle` included in v1 (client-only).
+
+## Confirmed open questions (2026-09-09 — auth)
+Decided with the user during the spec-10 review; each was a genuine fork, not a default.
+- **Identity mechanism**: JWT access + rotating refresh, over server sessions or SSO.
+- **Token transport**: refresh in an `HttpOnly` cookie, access token in memory (not
+  `localStorage`, and not a cookie-only design that would need CSRF tokens everywhere).
+- **Provisioning**: admin-created accounts plus a single-use invite link. No self-signup.
+- **Authorization depth**: per-project membership **and** record-level ownership rules — the
+  fullest of the three options offered.
+- **Global vs project role**: per-project role overrides the global one; global `admin` remains
+  a platform superuser that bypasses membership.
+- **Acting-as**: kept behind `AUTH_DEV_IMPERSONATION`, refused at boot in production, rather
+  than deleted outright (keeps e2e and local dev cheap) or kept as an admin impersonation
+  feature (a privilege-escalation surface nobody asked for).

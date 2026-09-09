@@ -1,6 +1,8 @@
 # Ticket Tracker — Progress
 
-**Spec fingerprint**: PLAN.md derived from spec files as of 2026-07-15.
+**Spec fingerprint**: PLAN.md Phase 1 (M1–M14) derived from spec files as of 2026-07-15;
+Phase 2 (M15–M21) derived from `specs/10-authentication-and-authorization.md` and
+`docs/auth-tech-spec.md` as of 2026-09-09.
 **Reference fingerprint**: `reference/Ticket Dashboard.dc.html` consulted as of 2026-07-15
 (behavioral/visual reference only — not requirements).
 <!-- Phase 3 compares current spec files against this before resuming.
@@ -25,6 +27,13 @@
 | M12 Create ticket view | done | specs/06 (2026-07-15) | 2026-09-08 |
 | M13 People & users views | done | specs/07 (2026-07-15) | 2026-09-08 |
 | M14 Testing & CI | done | specs/09 (2026-07-15) | 2026-09-08 |
+| M15 Auth schema, migration & backfill | **not started** | specs/10, docs/auth-tech-spec §2 (2026-09-09) | — |
+| M16 Password, invite & token services | **not started** | docs/auth-tech-spec §3 (2026-09-09) | — |
+| M17 Auth endpoints & AuthGuard | **not started** | specs/10 §4, tech-spec §4.1 (2026-09-09) | — |
+| M18 Project membership & scope guard | **not started** | specs/10 §3.2, tech-spec §5 (2026-09-09) | — |
+| M19 Record-level ownership | **not started** | specs/10 §3.3, tech-spec §5.2 (2026-09-09) | — |
+| M20 Web auth flow | **not started** | specs/10 §6, tech-spec §7 (2026-09-09) | — |
+| M21 Members UI, invites & cutover | **not started** | specs/10 §4.5, tech-spec §9 (2026-09-09) | — |
 
 ## Handoff log
 <!-- One entry per module, written at completion time (Phase 4 step 4). -->
@@ -1114,3 +1123,42 @@ docker compose run --rm migrate pnpm run db:seed               # first-run demo 
 docker compose up -d postgres && pnpm install && pnpm run dev  # api :3000, web :5173
 ```
 
+---
+
+## Phase 2 opened — real authentication & authorization (2026-09-09)
+
+**Trigger**: an audit of the v1 auth surface, requested by the user, followed by a decision
+review. Spec 08 always described the acting-as header as role *simulation*; this phase replaces
+it with real access control.
+
+### What the audit found
+The v1 mechanism works exactly as spec 08 described, and three gaps sit outside what spec 08
+covered at all:
+1. **Every `GET` is unauthenticated.** The full user directory (with email addresses), every
+   project, and every ticket are readable by anyone who can reach the API — the acting-user
+   header is only attached to mutations, and no read route carries `@Roles`.
+2. **No tenancy on identity.** Projects are the boundary for *data* (R2) but not for *people*:
+   any recognized user may write to any project. The `project_members` backlog item was the
+   placeholder for this.
+3. **Nothing prevents the platform being orphaned.** `PATCH /users/:id` lets the last admin
+   demote themselves, with no audit trail of the role change.
+
+None of these are defects against v1's specs. They are the reason v1's spec said not to deploy
+it anywhere real.
+
+### What was decided (see SPEC.md → D-auth2, D-scope, D-ownership)
+JWT access + rotating refresh with reuse detection; refresh in an `HttpOnly` cookie, access
+token in memory; admin-created accounts activated by single-use invite; per-project roles that
+override the global role, with global `admin` as a platform superuser; record-level ownership on
+assignment, deletion, and comment editing; acting-as retained only behind
+`AUTH_DEV_IMPERSONATION`, refused at boot in production.
+
+### Documents produced
+- `specs/10-authentication-and-authorization.md` — functional spec, R11–R19, threat model.
+- `docs/auth-tech-spec.md` — schema, token lifecycle, guard chain, config, test plan.
+- `docs/plan/PLAN.md` — modules M15–M21.
+
+### Next module
+**M15 — Auth schema, migration & backfill.** No dependencies; start there. Read spec 10 §3 and
+§5 before writing code — the `effectiveRole()` rule and the 404-not-403 decision drive
+everything downstream.
