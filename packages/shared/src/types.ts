@@ -2,6 +2,9 @@ import { z } from 'zod';
 import type { Department, TicketEnv, TicketPriority, TicketSeverity, TicketSize, TicketType, UserRole } from './enums';
 import {
   bugCreateSchema,
+  inviteAcceptSchema,
+  loginSchema,
+  passwordChangeSchema,
   commentCreateSchema,
   epicCreateSchema,
   moveTicketStatusSchema,
@@ -172,4 +175,32 @@ export interface OverviewStats {
   priorityBreakdown: PriorityBreakdownEntry[];
   /** The 5 most recently updated tickets, same shape as a list row. */
   recentActivity: TicketSummary[];
+}
+
+// --- Auth DTOs (spec 10) ---
+
+export type LoginDto = z.infer<typeof loginSchema>;
+export type PasswordChangeDto = z.infer<typeof passwordChangeSchema>;
+export type InviteAcceptDto = z.infer<typeof inviteAcceptSchema>;
+
+/** A user's project membership, as returned by login and /auth/me. */
+export interface Membership {
+  projectId: string;
+  role: UserRole;
+}
+
+/** One active session, for the "where am I signed in" view (spec 10 §4.3). */
+export interface SessionSummary {
+  id: string;
+  userAgent: string | null;
+  ip: string | null;
+  issuedAt: string;
+  /** True for the session making the request — the UI must not offer to revoke it as "other". */
+  current: boolean;
+}
+
+export interface AuthResult {
+  accessToken: string;
+  user: User;
+  memberships: Membership[];
 }

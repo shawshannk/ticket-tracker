@@ -217,6 +217,7 @@ first that may ship with the flag off.
 - **Goal**: The credential primitives, with no HTTP surface yet — pure units, exhaustively tested.
 - **Source spec**: docs/auth-tech-spec.md §3, §5.1; spec 10 §5.1
 - **Files**: `apps/api/src/auth/password.service.ts` (argon2id hash/verify, policy check), `apps/api/src/auth/token.service.ts` (JWT sign/verify, opaque refresh generation + sha256), `apps/api/src/auth/session.service.ts` (issue / rotate / revoke / revoke-family / revoke-all-for-user), `apps/api/src/auth/invite.service.ts`, `apps/api/src/auth/audit.service.ts`, `packages/shared/src/schemas.ts` (login, password-change, invite-accept schemas).
+- **Built 2026-09-09 with one deviation**: the policy itself went to `packages/shared/src/password-policy.ts`, not into `password.service.ts` — spec 10 §6's live checklist on the invite page needs it client-side too.
 - **Acceptance criteria**:
   - Password policy: ≥12 chars, rejects email local-part and the bundled common list.
   - Rotation marks the old token used and issues a new one in the same family, inside one transaction with `FOR UPDATE`.
@@ -227,7 +228,7 @@ first that may ship with the flag off.
 ### M17: Auth endpoints & AuthGuard (L)
 - **Goal**: Real login. Every route authenticated, with the dev-impersonation escape hatch.
 - **Source spec**: docs/auth-tech-spec.md §4.1, §5.1, §6.8; spec 10 §4.2–4.4
-- **Files**: `apps/api/src/auth/auth.controller.ts`, `auth.guard.ts` (replaces `acting-user.guard.ts`), `public.decorator.ts`, `auth-context.ts`, `auth.module.ts`, `apps/api/src/main.ts` (CORS credentials, bearer in Swagger, boot-time impersonation check), `apps/api/src/app.controller.ts` (`@Public()` health).
+- **Files**: `apps/api/src/auth/auth.controller.ts`, `auth.guard.ts` (replaces `acting-user.guard.ts`), `public.decorator.ts`, `auth-context.ts`, `auth.module.ts`, `apps/api/src/main.ts` (CORS credentials, bearer in Swagger, boot-time impersonation check), `apps/api/src/app.controller.ts` (`@Public()` health), **and `docker-compose.yml` + `.github/workflows/ci.yml`** — `AUTH_JWT_SECRET` became required to boot in M16 and is set in neither.
 - **Acceptance criteria**:
   - `POST /auth/login|refresh|logout|password`, `GET /auth/me|sessions`, `DELETE /auth/sessions/:id`, `POST /auth/invite/accept` behave per the tech spec's table.
   - Refresh cookie is `HttpOnly; SameSite=Lax; Path=/auth`, and `Secure` outside development.

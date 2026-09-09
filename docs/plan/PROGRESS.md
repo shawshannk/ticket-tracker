@@ -28,7 +28,7 @@ Phase 2 (M15–M21) derived from `specs/10-authentication-and-authorization.md` 
 | M13 People & users views | done | specs/07 (2026-07-15) | 2026-09-08 |
 | M14 Testing & CI | done | specs/09 (2026-07-15) | 2026-09-08 |
 | M15 Auth schema, migration & backfill | done | specs/10, docs/auth-tech-spec §2 (2026-09-09) | 2026-09-09 |
-| M16 Password, invite & token services | **not started** | docs/auth-tech-spec §3 (2026-09-09) | — |
+| M16 Password, invite & token services | done | docs/auth-tech-spec §3 (2026-09-09) | 2026-09-09 |
 | M17 Auth endpoints & AuthGuard | **not started** | specs/10 §4, tech-spec §4.1 (2026-09-09) | — |
 | M18 Project membership & scope guard | **not started** | specs/10 §3.2, tech-spec §5 (2026-09-09) | — |
 | M19 Record-level ownership | **not started** | specs/10 §3.3, tech-spec §5.2 (2026-09-09) | — |
@@ -1231,3 +1231,85 @@ everything downstream.
     M17's invite flow is not optional — without it, admins can create dead accounts.
 
 - **Next**: M16 — password, invite & token services. No blockers.
+
+### M16 — Password, invite & token services (done, 2026-09-09)
+
+The credential primitives, with no HTTP surface. M17 wires them to routes.
+
+- **Files created**:
+  - `packages/shared/src/password-policy.ts` — `checkPassword()`, `COMMON_PASSWORDS`,
+    `PASSWORD_MIN_LENGTH`, issue messages.
+  - `apps/api/src/auth/password.service.ts` — argon2id hash/verify, `verifyDummy` for login
+    timing equalisation, `assertAcceptable` throwing a Zod-shaped 400. Exports `ARGON2_OPTIONS`.
+  - `apps/api/src/auth/token.service.ts` — HS256 sign/verify with pinned algorithm, issuer and
+    audience; opaque refresh generation + sha256.
+  - `apps/api/src/auth/session.service.ts` — issue / rotate / isFamilyActive / revokeFamily /
+    revokeAllForUser / listForUser.
+  - `apps/api/src/auth/invite.service.ts`, `audit.service.ts`.
+  - Tests: `password.service.spec.ts` (13), `token.service.spec.ts` (15),
+    `session.int-spec.ts` (10), `invite.int-spec.ts` (8).
+- **Files modified**: `packages/shared/src/{index,schemas,types}.ts` (login / password-change /
+  invite-accept schemas; `Membership`, `SessionSummary`, `AuthResult` DTOs),
+  `apps/api/src/auth/auth.module.ts`, `apps/api/src/db/seed.ts`, `apps/api/package.json`
+  (jsonwebtoken), `apps/api/.env.example`.
+
+- **Two real bugs, both caught by tests that were written to catch exactly them**:
+  1. **Reuse detection was silently a no-op.** `rotate()` threw `UnauthorizedException` from
+     *inside* `db.transaction`, which rolls the transaction back — undoing the family revocation
+     and the audit row it had just written. The request still failed with a 401, so from the
+     outside it looked correct while a stolen session stayed alive. The transaction now returns a
+     verdict and the exception is raised **after the commit**. This is the single most important
+     line of this module; anything later that adds a throw inside that transaction reintroduces it.
+  2. **`listForUser` reported "unknown device"** whenever the newest token in a family carried no
+     user-agent (rotation need not pass request context). Now takes the most recent *non-null*
+     value via `array_agg(...) FILTER (WHERE ... IS NOT NULL)`.
+
+- **Decisions and deviations from PLAN.md**:
+  1. **The policy lives in `packages/shared`, not in `password.service.ts`** as the plan listed.
+     Spec 10 §6 requires the invite page to render a live policy checklist, so both sides need
+     the rule — the same argument that put `PERMISSIONS` there. The service wraps it and owns
+     enforcement.
+  2. **`COMMON_PASSWORDS` is filtered to entries ≥ 12 characters.** Anything shorter is already
+     rejected on length, so keeping it would make the check look broader than it is. Consequence
+     worth knowing: `too_short` and `too_common` can never both fire, and a test asserting all
+     three issues at once is unwritable.
+  3. **`TokenService` is registered with `useFactory`.** Its constructor takes plain strings
+     (secret, TTL) defaulted from env; Nest would try to resolve `String` as a provider and fail
+     at bootstrap. The factory also keeps it `new`-able in unit tests.
+  4. **Login does not apply the password policy** — only invite-accept and password-change do. An
+     existing password predating a policy change must still be presentable, and rejecting
+     non-policy-shaped submissions early tells an attacker something for free.
+  5. **`seed.ts` now imports `ARGON2_OPTIONS` from the service**, closing M15's deviation 3.
+
+- **Verification**:
+  | Check | Result |
+  |---|---|
+  | API unit | 95 passed (was 67; +28) |
+  | API integration | 73 passed (was 55; +18) |
+  | Web unit | 56 passed, unchanged |
+  | typecheck / lint | clean |
+  | API boots via `nest build` + `node dist/main.js`, `GET /users` and `/projects` | 200, no errors |
+  | Boot with a 8-byte `AUTH_JWT_SECRET` | exits 1: "must be at least 32 bytes (got 8)" |
+  | Boot with no `AUTH_JWT_SECRET` | exits 1: "is not set" |
+  | **argon2 inside `node:22-alpine`** | **hashes correctly; container boots and serves 200** |
+
+- **M15's flagged native-module risk is CLOSED.** `docker build -f apps/api/Dockerfile` succeeds,
+  argon2 loads and hashes in the image, and the container serves. No Dockerfile change was
+  needed: the runtime stage copies `node_modules` from the build stage on the same base image,
+  and argon2 ships a musl prebuild, so nothing is compiled.
+
+- **Gotchas for the next session (M17)**:
+  - **`tsx` cannot run the Nest app.** esbuild does not emit `design:paramtypes`, so DI fails with
+    "Cannot read properties of undefined (reading 'getAllAndOverride')". Use `nest start` or
+    `node dist/main.js`. The seed is fine under tsx because it uses no DI. This cost time here;
+    it will look like a real bug to whoever hits it next.
+  - `AUTH_JWT_SECRET` is now **required to boot**. It is set in `apps/api/.env` (gitignored) and
+    documented in `.env.example`. CI and `docker-compose.yml` do **not** set it yet — M17 must add
+    it to both, or the API container stops starting.
+  - `SessionService.isFamilyActive()` is the per-request check AuthGuard needs for R15. It is one
+    indexed query; do not cache it across requests without re-deriving R15.
+  - `AuditService.record()` takes an optional executor so callers can enlist it in their own
+    transaction. Reuse detection depends on that — record and revoke must commit together.
+  - Integration tests create and delete their own users; they no longer rely purely on seed data.
+
+- **Next**: M17 — auth endpoints & AuthGuard. No blockers.

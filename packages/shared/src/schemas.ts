@@ -17,6 +17,30 @@ export const ticketSeveritySchema = z.enum(TICKET_SEVERITIES);
 export const ticketEnvSchema = z.enum(TICKET_ENVS);
 export const ticketSizeSchema = z.enum(TICKET_SIZES);
 
+// --- Auth (spec 10) ---
+// Login deliberately does *not* apply the password policy: an existing password that predates a
+// policy change must still be presentable, and telling an attacker which submissions are
+// policy-shaped is free information. The policy applies where a password is *set*.
+
+export const loginSchema = z.object({
+  email: z.string().email('Enter a valid email address'),
+  password: z.string().min(1, 'Password is required'),
+});
+
+export const passwordChangeSchema = z.object({
+  currentPassword: z.string().min(1, 'Enter your current password'),
+  newPassword: z.string().min(1, 'Enter a new password'),
+});
+
+export const inviteAcceptSchema = z.object({
+  token: z.string().min(1, 'Invite token is required'),
+  password: z.string().min(1, 'Choose a password'),
+});
+
+export const logoutSchema = z.object({
+  allSessions: z.boolean().optional(),
+});
+
 // --- Users ---
 
 export const userCreateSchema = z.object({

@@ -1,19 +1,8 @@
 import 'dotenv/config';
 import * as argon2 from 'argon2';
+import { ARGON2_OPTIONS } from '../auth/password.service';
 import { createDb } from './index';
 import { projectMembers, projects, sprints, users } from './schema';
-
-/**
- * argon2id at the OWASP baseline (docs/auth-tech-spec.md §6.9). M16 lifts these into
- * `password.service.ts`; they live here for now because the seed needs a hash before that
- * service exists, and a seed nobody can log into is not a usable seed.
- */
-export const ARGON2_OPTIONS = {
-  type: argon2.argon2id,
-  memoryCost: 19456, // 19 MiB
-  timeCost: 2,
-  parallelism: 1,
-} as const;
 
 /**
  * Every seeded user shares this password so a fresh checkout is immediately usable. It is
