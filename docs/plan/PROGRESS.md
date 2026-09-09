@@ -27,7 +27,7 @@ Phase 2 (M15–M21) derived from `specs/10-authentication-and-authorization.md` 
 | M12 Create ticket view | done | specs/06 (2026-07-15) | 2026-09-08 |
 | M13 People & users views | done | specs/07 (2026-07-15) | 2026-09-08 |
 | M14 Testing & CI | done | specs/09 (2026-07-15) | 2026-09-08 |
-| M15 Auth schema, migration & backfill | **not started** | specs/10, docs/auth-tech-spec §2 (2026-09-09) | — |
+| M15 Auth schema, migration & backfill | done | specs/10, docs/auth-tech-spec §2 (2026-09-09) | 2026-09-09 |
 | M16 Password, invite & token services | **not started** | docs/auth-tech-spec §3 (2026-09-09) | — |
 | M17 Auth endpoints & AuthGuard | **not started** | specs/10 §4, tech-spec §4.1 (2026-09-09) | — |
 | M18 Project membership & scope guard | **not started** | specs/10 §3.2, tech-spec §5 (2026-09-09) | — |
@@ -1162,3 +1162,72 @@ assignment, deletion, and comment editing; acting-as retained only behind
 **M15 — Auth schema, migration & backfill.** No dependencies; start there. Read spec 10 §3 and
 §5 before writing code — the `effectiveRole()` rule and the 404-not-403 decision drive
 everything downstream.
+
+### M15 — Auth schema, migration & backfill (done, 2026-09-09)
+
+- **Files created**:
+  - `apps/api/src/db/schema/project-members.ts` — composite PK `(project_id, user_id)`, role
+    reusing `userRoleEnum`, `project_members_user_idx` for the "my projects" path.
+  - `apps/api/src/db/schema/refresh-tokens.ts` — one row per issued token; `family_id` groups a
+    session's rotations, `used_at` is what makes reuse detectable (R16).
+  - `apps/api/src/db/schema/invites.ts`, `auth-events.ts`.
+  - `apps/api/drizzle/0001_smart_wiccan.sql` + `meta/0001_snapshot.json`.
+  - `apps/api/src/users/user.mapper.spec.ts` — the R17 regression test.
+- **Files modified**: `apps/api/src/db/schema/users.ts` (status + credential columns),
+  `tickets.ts` (`reporter_id`), `schema/index.ts`, `apps/api/src/db/seed.ts`,
+  `packages/shared/src/enums.ts` (`USER_STATUSES`), `apps/api/package.json` (argon2), `README.md`.
+
+- **Decisions and deviations**:
+  1. **`tickets.reporter_id` added — a scope change, agreed with the user mid-module.** v1 stores
+     the reporter as a *display name* (`reporter: text`, set from `actingUser.name`), but the tech
+     spec's ownership rules authorize against `ticket.reporterId`. You cannot hang a permission on
+     a display name: names are not unique and a rename would silently move delete rights. M19 was
+     therefore unbuildable as written. Resolution: add a nullable FK, backfill it by exact name
+     match, and keep the text column as the historical display value so no query, DTO or view
+     changes. **All 9 existing tickets resolved**; the backfill deliberately skips ambiguous names
+     (`count(*) = 1` guard), leaving null, which fails the ownership check safely.
+  2. **The seed upserts credentials instead of skipping existing users.** `onConflictDoNothing`
+     would have left the eight users on any pre-existing dev database `invited` with no password —
+     i.e. unable to log in the moment M17 lands. It now re-asserts `status`/`password_hash` only,
+     so a locally edited name, department or role survives a re-seed.
+  3. **argon2 is a direct dependency of `apps/api` and hashing is inline in `seed.ts`**, with the
+     OWASP params exported as `ARGON2_OPTIONS`. M16 must lift these into `password.service.ts` and
+     re-point the seed at it. This was the agreed alternative to pulling M16's service forward.
+  4. **`USER_STATUSES` went into `packages/shared`**, matching how `USER_ROLES` already drives
+     `userRoleEnum`, rather than declaring the pg enum inline as the tech spec sketched.
+  5. **The `User` DTO is unchanged.** `status` exists in the database but is not yet on the wire —
+     M17/M21 add it when there is something that reads it. Keeping M15 schema-only meant zero
+     frontend churn.
+  6. **`assertLocalDatabase()` guards the seed.** It writes a known password onto every account, so
+     a non-local `DATABASE_URL` is refused unless `SEED_ALLOW_REMOTE=true`.
+
+- **Verification** (all run, all passing):
+  | Check | Result |
+  |---|---|
+  | `drizzle-kit generate` + `migrate` against the dev DB holding v1 data (8 users, 3 projects, 9 tickets, 5 comments) | applied cleanly |
+  | Backfill: `project_members` | 24 rows = 3 projects × 8 users, 0 role mismatches |
+  | Backfill: `tickets.reporter_id` | 9/9 resolved, 0 null, 0 unmatched names |
+  | Migrate + seed against a **fresh** database (`m15_fresh`, since dropped) | clean; 8 active users, 24 memberships |
+  | Seed idempotency (run twice) | no duplicate users, memberships or sprints |
+  | Password hashes | `$argon2id$v=19$m=19456,p=1,t=2$…` on all 8 |
+  | `assertLocalDatabase` | refuses a remote host; `SEED_ALLOW_REMOTE=true` bypasses |
+  | API unit | 67 passed (was 64; +3 mapper tests) |
+  | Web unit | 56 passed, unchanged |
+  | API integration | 55 passed, **unchanged** — the additions are backward compatible |
+  | `pnpm run typecheck` / `lint` | clean across all workspaces |
+
+- **Gotchas for the next session**:
+  - **`argon2` is a native module.** It builds via `node-gyp-build` on install. The API Dockerfile
+    likely prunes build dependencies — M16 or M17 must verify the built image still starts, and
+    this has *not* been checked yet. It is the most likely surprise in this phase.
+  - Integration tests currently share the dev database. Once M17 adds auth fixtures, they will
+    need their own database or a truncation strategy — the seed's `active` users are now part of
+    the fixture surface.
+  - The dev password `DevPassw0rd!2026` is in `seed.ts` and `README.md`. M16's password policy
+    (≥12 chars) must not reject it, or the seed breaks — it is 16 characters, so it passes, but
+    keep it in mind when writing the common-password list.
+  - `users.status` defaults to `invited`, so **any user created by the existing
+    `POST /users` right now cannot ever log in.** That is correct and intentional, but it means
+    M17's invite flow is not optional — without it, admins can create dead accounts.
+
+- **Next**: M16 — password, invite & token services. No blockers.

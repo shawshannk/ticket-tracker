@@ -8,6 +8,13 @@
       "when": 1785334416505,
       "tag": "0000_worried_doctor_strange",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788973220034,
+      "tag": "0001_smart_wiccan",
+      "breakpoints": true
     }
   ]
 }

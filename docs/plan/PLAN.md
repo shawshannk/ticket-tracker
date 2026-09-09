@@ -205,6 +205,7 @@ first that may ship with the flag off.
 - **Goal**: Every table and column real auth needs, plus a backfill that preserves today's access exactly.
 - **Source spec**: docs/auth-tech-spec.md §2
 - **Files**: `apps/api/src/db/schema/users.ts` (add `status`, `password_hash`, `password_changed_at`, `last_login_at`), new `project-members.ts`, `refresh-tokens.ts`, `invites.ts`, `auth-events.ts`, `apps/api/src/db/schema/index.ts`, generated migration under `apps/api/drizzle/`, `apps/api/src/db/seed.ts`.
+- **Scope added 2026-09-09 during implementation**: `tickets.reporter_id` (nullable FK to users) plus a name-matching backfill, and `USER_STATUSES` in `packages/shared/src/enums.ts`. The tech spec's ownership rules assume `ticket.reporterId`, but v1 stored the reporter as a denormalized display name — M19 was unbuildable as written without this. Decided with the user: add the FK, keep the text column for display.
 - **Acceptance criteria**:
   - `drizzle-kit generate` + `migrate` apply cleanly to a database holding v1 data.
   - Backfill inserts one `project_members` row per (project × user) with the user's global role, so no existing access is removed.
@@ -256,6 +257,7 @@ first that may ship with the flag off.
 - **Files**: `apps/api/src/auth/ownership.ts`, `apps/api/src/tickets/commands/delete-ticket.command.ts`, `update-ticket.command.ts`, new `update-comment.command.ts` + `delete-comment.command.ts`, `apps/api/src/tickets/comments.controller.ts`, all command constructors (`actingUser: User` → `auth: AuthContext`).
 - **Acceptance criteria**:
   - A project developer may delete a ticket they reported, and may not delete one they did not.
+  - Authorization reads `tickets.reporter_id` (added in M15), **never** the `reporter` display-name text. A null `reporter_id` fails the ownership check and falls back to manager/admin.
   - A developer may reassign a ticket where they are reporter or assignee, and not otherwise.
   - `PATCH /comments/:id` succeeds only for the author — **including** a refusal for a project admin — and `DELETE /comments/:id` succeeds for author or project admin.
   - Every `assertCan*` has a unit test with a hand-built `AuthContext`, in the style of `roles.guard.spec.ts`.

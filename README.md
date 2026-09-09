@@ -61,13 +61,30 @@ ticket-tracker-webapp/
 
 ```bash
 docker compose up -d postgres        # start just the DB
-cd apps/api && npm run db:migrate    # apply Drizzle migrations
-npm run dev                          # from repo root via Turborepo, runs api + web
+cd apps/api && pnpm run db:migrate   # apply Drizzle migrations
+pnpm run db:seed                     # demo data — 8 users, 3 projects, sprints, memberships
+pnpm run dev                         # from repo root via Turborepo, runs api + web
 ```
+
+### Seed credentials
+
+The seed creates all eight users **active**, sharing one password:
+
+```
+DevPassw0rd!2026
+```
+
+e.g. `jordan.lee@nimbus.io` (admin), `priya.nair@nimbus.io` (manager),
+`marcus.chen@nimbus.io` (developer).
+
+This is development-only by construction: the seed refuses to run against a non-local database
+unless `SEED_ALLOW_REMOTE=true` is set explicitly, because it writes a known password onto every
+account. Re-running the seed is idempotent and re-asserts those credentials without touching
+names, departments or roles.
 
 ## Known gaps carried over from the prototype (things it faked)
 
-- The prototype's "switch user" dropdown is not authentication — it's a demo convenience. This spec keeps that *pattern* deliberately (see spec 08) but is explicit that it provides no real access control until real auth is added.
+- The prototype's "switch user" dropdown is not authentication — it's a demo convenience. v1 kept that *pattern* deliberately (see spec 08). **Being replaced now**: `specs/10-authentication-and-authorization.md` specifies real auth, and `docs/plan/PLAN.md` M15–M21 build it. Until M21 lands, the acting-as header is still how the app identifies you.
 - The prototype's project switcher didn't actually filter data — this spec fixes that (see spec 02).
 - Comments were hardcoded to author "Jordan Lee" regardless of which demo user was active — this spec fixes that (see spec 05).
 - All prototype state lived in React memory and reset on refresh — this spec persists everything to Postgres.

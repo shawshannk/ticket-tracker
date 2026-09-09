@@ -25,7 +25,18 @@ export const tickets = pgTable('tickets', {
   priority: ticketPriorityEnum('priority').notNull(),
   severity: ticketSeverityEnum('severity'),
   assigneeId: uuid('assignee_id').references(() => users.id),
+  /**
+   * The reporter's *display name* at creation time. Kept because the list, board and detail
+   * views render it directly and it is the historical value; it is **not** an identity.
+   */
   reporter: text('reporter').notNull(),
+  /**
+   * The reporter as a real reference — what spec 10 §3.3's ownership rule authorizes against.
+   * Nullable because M15 backfilled it by matching the denormalized `reporter` name, and a row
+   * whose name never resolved stays null. A null simply fails the ownership check and falls
+   * back to the manager/admin path, which is the safe direction.
+   */
+  reporterId: uuid('reporter_id').references(() => users.id),
   labels: text('labels').array().notNull().default([]),
   env: ticketEnvEnum('env'),
   size: ticketSizeEnum('size'),

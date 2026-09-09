@@ -1,5 +1,10 @@
 # 08 — "Acting As" User & Permissions (No Real Auth in v1)
 
+> **Superseded 2026-09-09 by [10 — Authentication & Authorization](10-authentication-and-authorization.md).**
+> This document remains accurate as the record of what v1 shipped, and its "path to real auth
+> later" section is what spec 10 actually does. The acting-as header survives only as the
+> `AUTH_DEV_IMPERSONATION` development flag, which is refused at boot in production.
+
 You chose to keep this simple for now rather than build real login. This spec describes exactly what that means, including the parts that are worth being honest about rather than glossing over.
 
 ## What v1 does

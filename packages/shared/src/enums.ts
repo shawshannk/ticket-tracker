@@ -1,6 +1,14 @@
 export const USER_ROLES = ['admin', 'manager', 'developer'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
+/**
+ * Account lifecycle (spec 10 §4). `invited` has no password and cannot log in; `disabled` is
+ * how a departing user is removed, because accounts are never deleted — their name has to keep
+ * resolving on the tickets they reported and the comments they wrote (spec 10 §4.4).
+ */
+export const USER_STATUSES = ['invited', 'active', 'disabled'] as const;
+export type UserStatus = (typeof USER_STATUSES)[number];
+
 export const TICKET_TYPES = ['epic', 'story', 'bug'] as const;
 export type TicketType = (typeof TICKET_TYPES)[number];
 
