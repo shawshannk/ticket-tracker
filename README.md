@@ -44,6 +44,12 @@ ticket-tracker-webapp/
 └── README.md
 ```
 
+## Using the app
+
+[`docs/user-guide.md`](docs/user-guide.md) — the end-user guide: signing in, accepting an invite,
+the five views, creating and working on tickets, membership, and account settings. Written from
+the shipped behaviour, and the place to look before the specs if the question is "how do I…".
+
 ## Specs index
 
 1. `specs/00-architecture-and-data-model.md` — **read this first.** Entities, relationships, enums, computed fields.
@@ -56,6 +62,10 @@ ticket-tracker-webapp/
 8. `specs/07-people-and-users.md` — team list, add/edit member
 9. `specs/08-current-user-and-permissions.md` — the "acting as" selector and what it does/doesn't secure
 10. `specs/09-testing-and-devops.md` — test strategy, Docker Compose, CI pipeline
+11. `specs/10-authentication-and-authorization.md` — real auth: sign-in, per-project roles, ownership, the threat model
+
+Phase 2's implementation notes live in `docs/auth-tech-spec.md`; the module-by-module build record
+is in `docs/plan/`.
 
 ## Local development (once scaffolded)
 
