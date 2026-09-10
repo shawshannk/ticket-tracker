@@ -116,8 +116,9 @@ export class TicketsController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(ticketUpdateSchema)) body: TicketUpdateDto,
+    @Auth() auth: AuthContext,
   ): Promise<Ticket> {
-    return this.commandBus.execute(new UpdateTicketCommand(id, body));
+    return this.commandBus.execute(new UpdateTicketCommand(id, body, auth));
   }
 
   /** Board drag-drop (spec 04) — a narrow endpoint so a card move needn't send the ticket. */
@@ -134,19 +135,23 @@ export class TicketsController {
   }
 
   /**
-   * Manager/admin-only **for now**. Spec 10 §3.3 also lets a ticket's reporter delete it, which
-   * needs the row and therefore belongs in the handler (M19). Keeping the route gate until that
-   * check exists is deliberate: dropping it first would open deletion to every member for a
-   * module, and M19 replaces this line with `assertCanDeleteTicket`.
+   * Not `@RequireProject('ticket.delete')`: spec 10 §3.3 admits the ticket's *reporter* as well
+   * as a project manager/admin, and that needs the row, so `assertCanDeleteTicket` in the
+   * handler decides it.
+   *
+   * `ticket.read` — the weakest project permission, held by every role — stays on the route to
+   * mean "you must be a member of this project". Without it, a request carrying no identity at
+   * all (only reachable while AUTH_DEV_IMPERSONATION is on) would reach the handler with a null
+   * `auth` and crash instead of being refused.
    */
   @Delete('tickets/:id')
   @ProjectScope('ticket')
-  @RequireProject('ticket.delete')
+  @RequireProject('ticket.read')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete a ticket (Admin or Manager only)' })
+  @ApiOperation({ summary: 'Delete a ticket (reporter, or project Manager/Admin)' })
   @ApiBearerAuth()
-  remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    return this.commandBus.execute(new DeleteTicketCommand(id));
+  remove(@Param('id', ParseUUIDPipe) id: string, @Auth() auth: AuthContext): Promise<void> {
+    return this.commandBus.execute(new DeleteTicketCommand(id, auth));
   }
 
   /** Author comes from the authenticated user, never the body (R6). */

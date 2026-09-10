@@ -275,6 +275,14 @@ first that may ship with the flag off.
   - A developer may reassign a ticket where they are reporter or assignee, and not otherwise.
   - `PATCH /comments/:id` succeeds only for the author — **including** a refusal for a project admin — and `DELETE /comments/:id` succeeds for author or project admin.
   - Every `assertCan*` has a unit test with a hand-built `AuthContext`, in the style of `roles.guard.spec.ts`.
+- **Scope adjusted 2026-09-10 during implementation**:
+  - A route that hands its decision to `ownership.ts` still keeps `@RequireProject('ticket.read')`
+    — "you must be a member of this project". Without it, an identity-less request under
+    `AUTH_DEV_IMPERSONATION` reaches the handler with a null `auth` and 500s where v1 gave 403.
+    Found by probing the running container; applies to `DELETE /tickets/:id` and both comment routes.
+  - `MoveTicketStatusCommand` keeps its old signature: a status move has no ownership dimension,
+    and an unused `auth` parameter would imply a check that isn't there.
+  - No `edited_at` on comments — deferred, and noted for M20/M21 to decide alongside the UI.
 - **Depends on**: M18
 
 ### M20: Web auth flow (L)

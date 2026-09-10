@@ -160,6 +160,14 @@ export const commentCreateSchema = z.object({
   body: z.string().min(1),
 });
 
+/**
+ * `PATCH /comments/:id` (spec 10 §3.3). Only the body is editable — a comment's author and
+ * ticket are not things an edit may move.
+ */
+export const commentUpdateSchema = z.object({
+  body: z.string().min(1),
+});
+
 // --- Ticket list query (GET /projects/:projectId/tickets) ---
 // Lives in shared so the frontend's URL-search-param validation (R7) is the same schema the
 // API enforces. `coerce` because query-string values arrive as strings.

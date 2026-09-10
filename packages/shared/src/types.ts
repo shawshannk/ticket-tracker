@@ -17,6 +17,7 @@ import {
   memberUpdateSchema,
   passwordChangeSchema,
   commentCreateSchema,
+  commentUpdateSchema,
   epicCreateSchema,
   moveTicketStatusSchema,
   projectCreateSchema,
@@ -105,6 +106,7 @@ export type TicketCreateDto = z.infer<typeof ticketCreateSchema>;
 export type TicketUpdateDto = z.infer<typeof ticketUpdateSchema>;
 export type MoveTicketStatusDto = z.infer<typeof moveTicketStatusSchema>;
 export type CommentCreateDto = z.infer<typeof commentCreateSchema>;
+export type CommentUpdateDto = z.infer<typeof commentUpdateSchema>;
 export type TicketListQuery = z.infer<typeof ticketListQuerySchema>;
 export type BoardQuery = z.infer<typeof boardQuerySchema>;
 /** The raw, pre-default form — what a URL search-param parser starts from. */

@@ -84,7 +84,7 @@ describe('ticket write commands (integration)', () => {
       const before = epic.updatedAt;
       await new Promise((r) => setTimeout(r, 5));
 
-      const updated = await update.execute(new UpdateTicketCommand(epic.id, { priority: 'critical', status: 'In Progress' }));
+      const updated = await update.execute(new UpdateTicketCommand(epic.id, { priority: 'critical', status: 'In Progress' }, authContextFor(actor())));
       expect(updated.priority).toBe('critical');
       expect(updated.status).toBe('In Progress');
       expect(new Date(updated.updatedAt).getTime()).toBeGreaterThan(new Date(before).getTime());
@@ -94,9 +94,9 @@ describe('ticket write commands (integration)', () => {
     it('validates status against the stored type, not the request', async () => {
       const epic = await mkEpic();
       const story = await mkStory(epic.id);
-      await expect(update.execute(new UpdateTicketCommand(epic.id, { status: 'Backlog' }))).rejects.toThrow(BadRequestException);
-      await expect(update.execute(new UpdateTicketCommand(story.id, { status: 'Planned' }))).rejects.toThrow(BadRequestException);
-      await expect(update.execute(new UpdateTicketCommand(story.id, { status: 'In Review' }))).resolves.toMatchObject({ status: 'In Review' });
+      await expect(update.execute(new UpdateTicketCommand(epic.id, { status: 'Backlog' }, authContextFor(actor())))).rejects.toThrow(BadRequestException);
+      await expect(update.execute(new UpdateTicketCommand(story.id, { status: 'Planned' }, authContextFor(actor())))).rejects.toThrow(BadRequestException);
+      await expect(update.execute(new UpdateTicketCommand(story.id, { status: 'In Review' }, authContextFor(actor())))).resolves.toMatchObject({ status: 'In Review' });
     });
 
     it('re-checks R5 when either link changes', async () => {
@@ -106,24 +106,24 @@ describe('ticket write commands (integration)', () => {
       const bug = await mkBug(epicA.id, storyUnderA.id);
 
       // Moving the bug to another epic while it still points at a story under the old one.
-      await expect(update.execute(new UpdateTicketCommand(bug.id, { epicId: epicB.id }))).rejects.toThrow(/outside its own epic/i);
+      await expect(update.execute(new UpdateTicketCommand(bug.id, { epicId: epicB.id }, authContextFor(actor())))).rejects.toThrow(/outside its own epic/i);
       // Moving both together is fine.
       const storyUnderB = await mkStory(epicB.id);
       await expect(
-        update.execute(new UpdateTicketCommand(bug.id, { epicId: epicB.id, storyId: storyUnderB.id })),
+        update.execute(new UpdateTicketCommand(bug.id, { epicId: epicB.id, storyId: storyUnderB.id }, authContextFor(actor()))),
       ).resolves.toMatchObject({ epicId: epicB.id, storyId: storyUnderB.id });
     });
 
     it('refuses type-inappropriate fields', async () => {
       const epic = await mkEpic();
-      await expect(update.execute(new UpdateTicketCommand(epic.id, { severity: '1' }))).rejects.toThrow(BadRequestException);
-      await expect(update.execute(new UpdateTicketCommand(epic.id, { env: 'staging' }))).rejects.toThrow(BadRequestException);
+      await expect(update.execute(new UpdateTicketCommand(epic.id, { severity: '1' }, authContextFor(actor())))).rejects.toThrow(BadRequestException);
+      await expect(update.execute(new UpdateTicketCommand(epic.id, { env: 'staging' }, authContextFor(actor())))).rejects.toThrow(BadRequestException);
     });
 
     it('treats an empty body as a no-op and 404s an unknown ticket', async () => {
       const epic = await mkEpic();
-      await expect(update.execute(new UpdateTicketCommand(epic.id, {}))).resolves.toMatchObject({ id: epic.id });
-      await expect(update.execute(new UpdateTicketCommand(MISSING, { priority: 'low' }))).rejects.toThrow(NotFoundException);
+      await expect(update.execute(new UpdateTicketCommand(epic.id, {}, authContextFor(actor())))).resolves.toMatchObject({ id: epic.id });
+      await expect(update.execute(new UpdateTicketCommand(MISSING, { priority: 'low' }, authContextFor(actor())))).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -180,7 +180,7 @@ describe('ticket write commands (integration)', () => {
       const epic = await mkEpic();
       const created = await comment.execute(new AddCommentCommand(epic.id, { body: 'bye' }, authContextFor(actor())));
 
-      await remove.execute(new DeleteTicketCommand(epic.id));
+      await remove.execute(new DeleteTicketCommand(epic.id, authContextFor(actor())));
 
       expect(await db.select().from(tickets).where(eq(tickets.id, epic.id))).toHaveLength(0);
       expect(await db.select().from(comments).where(eq(comments.id, created.id))).toHaveLength(0);
@@ -190,23 +190,23 @@ describe('ticket write commands (integration)', () => {
       const epic = await mkEpic();
       const story = await mkStory(epic.id);
 
-      await expect(remove.execute(new DeleteTicketCommand(epic.id))).rejects.toThrow(ConflictException);
+      await expect(remove.execute(new DeleteTicketCommand(epic.id, authContextFor(actor())))).rejects.toThrow(ConflictException);
       expect(await db.select().from(tickets).where(eq(tickets.id, epic.id))).toHaveLength(1);
 
       // Once the child is gone the parent can be deleted.
-      await remove.execute(new DeleteTicketCommand(story.id));
-      await expect(remove.execute(new DeleteTicketCommand(epic.id))).resolves.toBeUndefined();
+      await remove.execute(new DeleteTicketCommand(story.id, authContextFor(actor())));
+      await expect(remove.execute(new DeleteTicketCommand(epic.id, authContextFor(actor())))).resolves.toBeUndefined();
     });
 
     it('counts a bug story-link as a child too', async () => {
       const epic = await mkEpic();
       const story = await mkStory(epic.id);
       await mkBug(epic.id, story.id);
-      await expect(remove.execute(new DeleteTicketCommand(story.id))).rejects.toThrow(ConflictException);
+      await expect(remove.execute(new DeleteTicketCommand(story.id, authContextFor(actor())))).rejects.toThrow(ConflictException);
     });
 
     it('404s an unknown ticket', async () => {
-      await expect(remove.execute(new DeleteTicketCommand(MISSING))).rejects.toThrow(NotFoundException);
+      await expect(remove.execute(new DeleteTicketCommand(MISSING, authContextFor(actor())))).rejects.toThrow(NotFoundException);
     });
   });
 });

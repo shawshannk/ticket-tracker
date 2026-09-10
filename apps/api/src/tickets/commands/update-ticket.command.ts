@@ -3,6 +3,8 @@ import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import type { Ticket, TicketUpdateDto } from '@ticket-tracker/shared';
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../db';
+import type { AuthContext } from '../../auth/auth-context';
+import { assertCanAssignTicket } from '../../auth/ownership';
 import { DB } from '../../db/db.module';
 import { tickets } from '../../db/schema';
 import { toTicket } from '../ticket.mapper';
@@ -13,22 +15,32 @@ export class UpdateTicketCommand {
   constructor(
     readonly id: string,
     readonly input: TicketUpdateDto,
+    readonly auth: AuthContext,
   ) {}
 }
 
 /**
- * `PATCH /tickets/:id` — the detail view's Save (spec 05). Not role-gated beyond requiring a
- * recognized acting user: every role may edit any ticket per the spec 00 matrix.
+ * `PATCH /tickets/:id` — the detail view's Save (spec 05). Editing stays open to every project
+ * member: a tracker where a developer cannot fix a wrong label on someone else's bug is one
+ * people route around (spec 10 §3.3). **Reassignment is the exception** — see the ownership
+ * check below.
  */
 @CommandHandler(UpdateTicketCommand)
 export class UpdateTicketHandler implements ICommandHandler<UpdateTicketCommand, Ticket> {
   constructor(@Inject(DB) private readonly db: Db) {}
 
-  async execute({ id, input }: UpdateTicketCommand): Promise<Ticket> {
+  async execute({ id, input, auth }: UpdateTicketCommand): Promise<Ticket> {
     return this.db.transaction(async (tx) => {
       const [current] = await tx.select().from(tickets).where(eq(tickets.id, id)).limit(1);
       if (!current) {
         throw new NotFoundException(`Ticket ${id} not found`);
+      }
+
+      // R14: only a *change* of assignee is gated, and only against the stored row. A PATCH that
+      // resends the current assignee alongside other edits is not a reassignment and must not be
+      // refused as one — the detail view sends the whole form on Save.
+      if (input.assigneeId !== undefined && input.assigneeId !== current.assigneeId) {
+        assertCanAssignTicket(auth, current);
       }
 
       // `type` is immutable after creation, so every rule is checked against the stored type,

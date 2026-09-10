@@ -31,7 +31,7 @@ Phase 2 (M15–M21) derived from `specs/10-authentication-and-authorization.md` 
 | M16 Password, invite & token services | done | docs/auth-tech-spec §3 (2026-09-09) | 2026-09-09 |
 | M17 Auth endpoints & AuthGuard | done | specs/10 §4, tech-spec §4.1 (2026-09-09) | 2026-09-09 |
 | M18 Project membership & scope guard | done | specs/10 §3.2, tech-spec §5 (2026-09-09) | 2026-09-10 |
-| M19 Record-level ownership | **not started** | specs/10 §3.3, tech-spec §5.2 (2026-09-09) | — |
+| M19 Record-level ownership | done | specs/10 §3.3, tech-spec §5.2 (2026-09-09) | 2026-09-10 |
 | M20 Web auth flow | **not started** | specs/10 §6, tech-spec §7 (2026-09-09) | — |
 | M21 Members UI, invites & cutover | **not started** | specs/10 §4.5, tech-spec §9 (2026-09-09) | — |
 
@@ -1498,3 +1498,94 @@ web app working, and it is now the *only* thing that does.
     needs a real `users` row too.
 
 - **Next**: M19 — record-level ownership & comment editing. No blockers.
+
+### M19 — Record-level ownership & comment editing (done, 2026-09-10)
+
+The rules that need the row, enforced where the row is loaded. The API's authorization model is
+now complete; M20 and M21 are frontend and cutover.
+
+- **Files created**: `apps/api/src/auth/ownership.ts`, `ownership.spec.ts` (24),
+  `ownership.int-spec.ts` (22); `apps/api/src/tickets/comments.controller.ts`,
+  `commands/update-comment.command.ts`, `commands/delete-comment.command.ts`.
+- **Files modified**: `packages/shared/src/{schemas,types}.ts` (`commentUpdateSchema`,
+  `CommentUpdateDto`); `apps/api/src/tickets/commands/{delete-ticket,update-ticket}.command.ts`;
+  `apps/api/src/tickets/{tickets.controller,tickets.module}.ts`;
+  `apps/api/src/tickets/commands/write-commands.int-spec.ts`.
+
+- **The decision that shaped the module — ownership is four pure functions, not a service.**
+  `ownership.ts` holds `assertCanDeleteTicket`, `assertCanAssignTicket`, `assertCanEditComment`
+  and `assertCanDeleteComment`, each a pure decision over `(AuthContext, row)`. Nothing is
+  injected, so `ownership.spec.ts` can enumerate the whole table — role × relationship, both
+  independent — in 24 cases with no database and no Nest. The AC asked for exhaustive unit
+  coverage; pure functions are what made "exhaustive" cheap enough to actually mean it.
+
+- **Decisions and deviations**:
+  1. **A regression caught during verification, and the fix.** Removing
+     `@RequireProject('ticket.delete')` from `DELETE /tickets/:id` — required, since the route
+     gate would refuse the reporter before ownership ran — left the route with *no* permission
+     decorator. Under `AUTH_DEV_IMPERSONATION` an identity-less request then reached the handler
+     with a null `auth` and returned **500** where v1 returned 403. The same hole existed on both
+     new comment routes. All three now carry `@RequireProject('ticket.read')` — the weakest
+     project permission, held by every role — which reads as "you must be a member of this
+     project" and leaves the real decision to `ownership.ts`. Verified against the running
+     container: all three are 403 for an anonymous caller, with no `TypeError` in the log.
+  2. **`assertCanDeleteTicket` runs before the children check**, not after. A developer probing
+     someone else's epic now learns "you may not" rather than the keys of every ticket linked
+     to it.
+  3. **Only a *change* of assignee is gated.** `UpdateTicketHandler` compares `input.assigneeId`
+     against the stored row. The detail view sends the whole form on Save, so an unchanged
+     `assigneeId` arrives on every edit; refusing that would have made any ticket uneditable by
+     everyone except its owner. There is a test named for exactly this.
+  4. **`assertCanDeleteComment` spells the role out rather than calling `can()`.** It is the only
+     project rule that admits admins but not managers, so there is no matrix row for it — the
+     tech spec's §5 map has none either. Inventing a one-role action that reads like the others
+     but isn't would have been worse than the explicit comparison.
+  5. **`MoveTicketStatusCommand` was left alone.** §5.3 says "all command constructors", but a
+     status move is `ticket.update`, open to every member, with no ownership dimension — adding
+     an unused `auth` parameter would imply a check that isn't there.
+  6. **Comment editing leaves no trace.** There is no `edited_at` column and none was added: it
+     needs a migration, which is outside M19's file list, and no AC asks for it. Flagged below,
+     because spec 10 §3.3 leans hard on comments being attributable speech.
+
+- **Verification**:
+  | Check | Result |
+  |---|---|
+  | API unit | 151 passed (was 127; +24 ownership) |
+  | API integration | 148 passed (was 126; +22 ownership) |
+  | Web unit | 56 passed, unchanged |
+  | typecheck / build | clean; 5 pre-existing web lint warnings, 0 errors |
+  | **e2e, unchanged, against a rebuilt Compose stack** | **5/5 passed** |
+  | Developer deletes a ticket they reported / one they did not | 204 / 403 |
+  | Manager deletes a ticket they did not report | 204 |
+  | Null `reporter_id` whose `reporter` *name* matches the caller | 403 for the developer, 204 for the manager |
+  | Non-member deleting a ticket | 404, not 403 — R12 survives the looser gate |
+  | Developer reassigns as reporter / as assignee / as neither | 200 / 200 / 403 |
+  | Developer edits other fields on a ticket they do not own | 200 |
+  | Unchanged `assigneeId` resent with an edit | 200 |
+  | `PATCH /comments/:id` by author / by another dev / by manager / **by project admin** | 200 / 403 / 403 / **403** |
+  | `DELETE /comments/:id` by author / project admin / project manager / another dev | 204 / 204 / 403 / 403 |
+  | Non-member on `/comments/:id` | 404 |
+  | Dev config: anonymous DELETE ticket, PATCH comment, DELETE comment | 403 / 403 / 403, no TypeError |
+
+- **Gotchas for the next session (M20)**:
+  - **A route whose decision is ownership still needs `@RequireProject('ticket.read')`.** It is
+    what stops an identity-less dev-mode request reaching the handler. Any future route that
+    drops its role gate in favour of an ownership check must keep that one — see deviation 1.
+  - **`PATCH /comments/:id` and `DELETE /comments/:id` have no frontend yet.** The API is done;
+    the detail view's comment list has no edit or delete affordance, and `Comment` carries
+    `authorId`, so M20/M21 can compare it against `useAuth().user.id`. The server re-checks
+    either way (R14).
+  - **An edited comment is indistinguishable from an original.** No `edited_at`. If the UI is
+    going to offer editing, decide whether it should say so — that is a migration plus a mapper
+    field, small but not free.
+  - **`assertCanAssignTicket` is called only from `UpdateTicketHandler`.** `MoveTicketStatus`
+    cannot change an assignee, so it needs no check; if a future endpoint can, it needs one.
+  - **Ownership functions take a non-null `AuthContext`.** They are safe to call from any handler
+    behind a `@RequireProject` route and unsafe from one without it. That is the invariant the
+    route decorators encode.
+  - **`write-commands.int-spec.ts` now threads `authContextFor(actor())`** — `actor()` defaults
+    to manager, which passes every ownership check, so those tests still exercise the rules they
+    were written for rather than accidentally testing authorization.
+
+- **Next**: M20 — web auth flow (L). It is the first module that breaks the old client; the flag
+  may not come off in Compose until M21. No blockers.
