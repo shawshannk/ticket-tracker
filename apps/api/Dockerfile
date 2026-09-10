@@ -20,10 +20,32 @@ RUN pnpm --filter @ticket-tracker/shared run build \
 
 FROM base AS runtime
 ENV NODE_ENV=production
-COPY --from=build /repo/node_modules node_modules
-COPY --from=build /repo/package.json /repo/pnpm-workspace.yaml ./
-COPY --from=build /repo/packages/shared packages/shared
-COPY --from=build /repo/apps/api apps/api
+
+# A production-only install rather than copying the build stage's node_modules: the build tree
+# carries the Nest CLI, SWC, vitest and drizzle-kit, none of which belong in a running image.
+# `pnpm prune --prod` was tried first and is the wrong tool here — on this workspace it left the
+# dev dependencies in place *and* removed transitive runtime ones, so the image failed to boot.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/shared/package.json packages/shared/
+COPY apps/api/package.json apps/api/
+COPY --from=build /repo/packages/shared/dist packages/shared/dist
+RUN pnpm install --frozen-lockfile --prod --filter @ticket-tracker/api... --filter @ticket-tracker/shared
+
+COPY --from=build /repo/apps/api/dist apps/api/dist
+COPY apps/api/drizzle apps/api/drizzle
+COPY apps/api/drizzle.config.ts apps/api/
+
 WORKDIR /repo/apps/api
+
+# The node image ships an unprivileged `node` user; nothing here needs root, and a container that
+# runs as root turns a code-execution bug into a container-escape attempt (spec 11 §6).
+USER node
+
 EXPOSE 3000
+
+# Liveness only — a readiness failure means "stop sending traffic", which is the orchestrator's
+# call, not a reason for Docker to kill the container.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
 CMD ["node", "dist/main.js"]

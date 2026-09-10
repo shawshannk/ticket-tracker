@@ -73,7 +73,7 @@ test.describe('server-enforced rules', () => {
     });
     // The board preventing the drop is UX; this is the actual control.
     expect(res.status).toBe(400);
-    expect((await res.json()).message).toContain('not a valid status');
+    expect((await res.json()).error.message).toContain('not a valid status');
   });
 
   test('a developer cannot create an epic, in the UI or at the API (R3)', async ({ page }) => {

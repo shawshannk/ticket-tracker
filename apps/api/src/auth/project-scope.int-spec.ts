@@ -163,7 +163,7 @@ describe('project scoping and per-project roles (integration)', () => {
       const fake = await get('outsider', '/projects/00000000-0000-4000-8000-000000000000');
       // Same status *and* same body: a differing message is an existence oracle too.
       expect(real.status).toBe(fake.status);
-      expect(real.body.message).toBe(fake.body.message);
+      expect(real.body.error.message).toBe(fake.body.error.message);
     });
 
     it('refuses a write with 404 as well, not 403', async () => {

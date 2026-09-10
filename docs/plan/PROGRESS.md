@@ -35,7 +35,7 @@ as of 2026-09-10.
 | M19 Record-level ownership | done | specs/10 §3.3, tech-spec §5.2 (2026-09-09) | 2026-09-10 |
 | M20 Web auth flow | done | specs/10 §6, tech-spec §7 (2026-09-09) | 2026-09-10 |
 | M21 Members UI, invites & cutover | done | specs/10 §4.5, tech-spec §9 (2026-09-09) | 2026-09-10 |
-| M22 Production hardening | pending | specs/11 (2026-09-10) | — |
+| M22 Production hardening | done | specs/11 (2026-09-10) | 2026-09-10 |
 | M23 Ticket event stream | pending | specs/12 §1–3 (2026-09-10) | — |
 | M24 Soft delete & trash | pending | specs/12 §4–5 (2026-09-10) | — |
 | M25 Job runner & outbox | pending | specs/13 §1–2 (2026-09-10) | — |
@@ -1890,3 +1890,85 @@ shipping configuration (`AUTH_DEV_IMPERSONATION=false`) on both the built image 
 5. `AUTH_JWT_SECRET` is single-valued; rotation logs everyone out.
 6. SSO, out of scope by spec 10 §9.
 
+### M22 — Production hardening (done, 2026-09-10)
+- **Files created**: `apps/api/src/config/env.ts` (+ `env.spec.ts`);
+  `src/common/logging/{request-context.ts,request-id.middleware.ts,logger.options.ts}`
+  (+ `request-id.middleware.spec.ts`); `src/common/filters/all-exceptions.filter.ts`
+  (+ `.spec.ts`); `src/common/interceptors/timeout.interceptor.ts`;
+  `src/health/{health.module.ts,health.controller.ts,db.health.ts,health.int-spec.ts}`;
+  `src/observability/sentry.ts`; `packages/shared/src/errors.ts`.
+- **Files modified**: `src/main.ts` (rewritten), `src/app.module.ts`, `src/common/zod-validation.pipe.ts`,
+  `apps/api/Dockerfile`, `apps/web/Dockerfile`, `apps/api/.env.example`, `apps/api/package.json`,
+  `packages/shared/src/index.ts`, `apps/web/src/api/client.ts` (+ `client.spec.ts`),
+  `docker-compose.yml`, `.github/workflows/ci.yml`, `pnpm-lock.yaml`; assertion updates in
+  `auth.int-spec.ts`, `project-scope.int-spec.ts`, `e2e/rules.spec.ts`.
+- **Files deleted**: `src/app.controller.ts` — its only route was `/health`, which moved into
+  `HealthModule` alongside `/health/live` and `/health/ready`.
+
+- **Key decisions / deviations from PLAN.md**:
+  - **Nest 10, not 11.** `nestjs-pino@5` and `@nestjs/terminus@12` require Nest 11+. Pinned
+    `nestjs-pino@4` / `@nestjs/terminus@10` rather than upgrading the framework inside a
+    hardening module. A Nest 11 upgrade is now a backlog item.
+  - **Env validation is centralised; env *consumption* is not.** `loadEnv()` validates every
+    variable at boot, but `TokenService`, `SessionService`, `login-rate-limit.ts` and
+    `dev-impersonation.ts` still read `process.env` themselves. Migrating them is a mechanical
+    change with real risk to auth behaviour and no benefit once the values are already validated.
+    `APP_CONFIG` is exported from AppModule for new code to inject.
+  - **`getConfig()` is memoized and `main.ts` imports AppModule dynamically.** AppModule reads
+    config while being *defined*; a throw during module evaluation escapes as a raw stack trace
+    that no handler in `bootstrap()` can reformat. Verified in the image: a missing
+    `AUTH_JWT_SECRET` now prints two readable lines.
+  - **The web client had to change in this module.** The new envelope is breaking for
+    `apps/web/src/api/client.ts`, which read `payload.message` / `payload.issues`. `ApiError`
+    gained `code`, `details` and `requestId`; `.issues` is kept as a getter alias so no call site
+    outside the client changed. The flat pre-M22 body is still parsed as a fallback, for errors
+    produced *in front of* the API (nginx, a proxy).
+  - **Terminus health reports pass through the filter unchanged** — identified by payload shape,
+    not by path. Rewriting them into the error envelope would discard the per-dependency
+    breakdown, which is the only part a probe cares about. This is the one documented exception
+    to "one shape, always".
+  - **Timeout returns 503, not 408** (spec 11 §5): 408 means the *client* was slow to send.
+  - **The Zod pipe rethrows the raw `ZodError`** instead of wrapping it in a
+    `BadRequestException`, so the issue list survives as structure to the response. Handlers that
+    still throw `BadRequestException({ message, issues })` keep working — the filter normalises
+    `issues` into `details`.
+
+- **Gotchas found while verifying (each one was a real failure first)**:
+  - `pnpm prune --prod` is the wrong tool on this workspace: it left every devDependency in place
+    *and* removed transitive runtime ones, producing an image that could not boot. The runtime
+    stage now does a real `pnpm install --prod`.
+  - That prod install then broke `docker compose run migrate`, because `drizzle-kit` and `tsx`
+    were devDependencies. **Both moved to `dependencies`** — migrating and seeding are production
+    operations in this deployment model. `express` also moved to an explicit dependency, since
+    `main.ts` imports it directly (it was a phantom dependency before).
+  - **`pino-pretty` is a devDependency, and Compose runs the production image with
+    `NODE_ENV=development`** — so the container exited on boot with "unable to determine transport
+    target". The pretty transport is now selected by *resolvability*, not by NODE_ENV, and
+    degrades to JSON. This is the bug that justifies running the container rather than reading
+    the Dockerfile.
+  - Body-parser errors (413 oversize, 400 malformed JSON) are `http-errors` objects, not
+    `HttpException`s, so they landed as 500s. Mapped explicitly, honouring only `expose: true`,
+    and with our own messages — body-parser's own message quotes the offending body fragment back.
+  - Any int-spec that boots AppModule must set `AUTH_DEV_IMPERSONATION=false` **before** a
+    dynamic import of AppModule. A local `.env` with impersonation on otherwise makes every route
+    anonymous-accessible and the suite asserts nothing.
+  - Node refuses to *send* a header containing a newline, so header-injection rejection cannot be
+    tested through supertest; it is covered in `request-id.middleware.spec.ts` instead.
+
+- **Verified**: `pnpm run typecheck` (4/4), `pnpm run lint` (0 errors), `pnpm run test`
+  (183 API + 63 web), `pnpm run build` (3/3), `pnpm run test:integration` (162, real Postgres),
+  `pnpm run test:e2e` (15/15, against rebuilt Compose containers). Manually against the built
+  image and a running server: non-root uid, zero dev dependencies in the image, readable boot
+  failure for a missing/short/malformed variable, `/api` 404 under `NODE_ENV=production`, helmet
+  headers present, 1 MB body limit enforced as 413, and **SIGTERM with 60 in-flight requests:
+  60/200s, zero connection errors, clean exit**. `/health/ready` returning 503 with the database
+  down is covered in `health.int-spec.ts` by overriding the DB provider.
+
+- **Open issues for the next session**:
+  - Metrics and tracing were deliberately left to M60 (spec 11 "Out of scope").
+  - `SHUTDOWN_TIMEOUT_MS` is validated and documented but not yet enforced as a hard deadline —
+    `enableShutdownHooks()` drains without an upper bound. A forced-exit timer is a small
+    follow-up; noted in the backlog.
+  - The API's own `.env` in this working copy has `AUTH_DEV_IMPERSONATION=true`. That is a local
+    developer setting, not a repo one, but it is why the first int-spec run passed a 401 test at
+    200 — worth knowing before debugging a similar surprise.

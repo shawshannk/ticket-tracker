@@ -1,3 +1,4 @@
+import { type ApiErrorDetail, type ErrorCode, isApiErrorBody } from '@ticket-tracker/shared';
 import { getAccessToken, notifySessionExpired, runRefresh } from '../auth/tokenStore';
 
 /**
@@ -19,11 +20,26 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
-    /** Zod issue list from the API's validation pipe, when present. */
-    readonly issues?: { path: string; message: string }[],
+    /**
+     * The stable machine-readable code from the API's error envelope (spec 11 §3). Branch on
+     * this, never on `message` — the message is prose and may be reworded at any time.
+     */
+    readonly code: ErrorCode | undefined,
+    /** Field-level validation detail, when the API sent any. */
+    readonly details?: ApiErrorDetail[],
+    /**
+     * Echoed from the `x-request-id` response header / envelope. Surfaced in error UI so a user
+     * can quote it and an operator can find the exact log line.
+     */
+    readonly requestId?: string,
   ) {
     super(message);
     this.name = 'ApiError';
+  }
+
+  /** Back-compat alias: pre-M22 call sites read `.issues`. */
+  get issues(): ApiErrorDetail[] | undefined {
+    return this.details;
   }
 }
 
@@ -93,10 +109,21 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   const payload = await response.json().catch(() => null);
 
   if (!response.ok) {
+    // M22 gave every API error one shape. The pre-M22 flat `{ message, issues }` body is still
+    // read as a fallback so a stale API build, or an error produced by something in front of the
+    // API (a proxy, nginx), still yields a usable message rather than "Request failed".
+    if (isApiErrorBody(payload)) {
+      const { code, message, requestId, details } = payload.error;
+      throw new ApiError(response.status, message, code, details, requestId);
+    }
+
+    const legacy = payload as { message?: unknown; issues?: ApiErrorDetail[] } | null;
     throw new ApiError(
       response.status,
-      typeof payload?.message === 'string' ? payload.message : `Request failed (${response.status})`,
-      payload?.issues,
+      typeof legacy?.message === 'string' ? legacy.message : `Request failed (${response.status})`,
+      undefined,
+      legacy?.issues,
+      response.headers?.get?.('x-request-id') ?? undefined,
     );
   }
 

@@ -16,6 +16,10 @@ env:
   # Off since M21: CI runs the same configuration as a real deployment, so a regression that
   # only shows up without the legacy header fails here rather than in production.
   AUTH_DEV_IMPERSONATION: "false"
+  # M22: every variable is validated at boot by src/config/env.ts, so CI runs the same
+  # configuration shape a deployment does. Quiet by default — a passing run should not print
+  # a request log per assertion.
+  LOG_LEVEL: "warn"
 
 jobs:
   # Fast feedback: everything that doesn't need a database.

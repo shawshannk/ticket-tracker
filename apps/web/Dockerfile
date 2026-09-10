@@ -30,4 +30,16 @@ COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 # expand `$uri` in try_files and break SPA routing.
 RUN sed -i "s|__API_ORIGIN__|${VITE_API_URL}|g" /etc/nginx/conf.d/default.conf \
  && nginx -t
+
+# Non-root (spec 11 §6). nginx normally starts as root to bind a privileged port and then drops
+# to `nginx` for its workers; on 5173 the root master buys nothing. The chown list is exactly the
+# paths nginx writes to — miss one and the container exits on start, which is why this is
+# verified by actually running the image rather than by reading the Dockerfile.
+RUN touch /var/run/nginx.pid \
+ && chown -R nginx:nginx /var/cache/nginx /var/log/nginx /var/run/nginx.pid /etc/nginx/conf.d
+USER nginx
+
 EXPOSE 5173
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://127.0.0.1:5173/ || exit 1

@@ -143,7 +143,7 @@ describe('auth endpoints (integration)', () => {
       ]);
 
       const statuses = new Set(responses.map((r) => r.status));
-      const messages = new Set(responses.map((r) => r.body.message));
+      const messages = new Set(responses.map((r) => r.body.error.message));
 
       expect(statuses).toEqual(new Set([401]));
       expect(messages.size).toBe(1);
@@ -390,7 +390,7 @@ describe('auth endpoints (integration)', () => {
     it('gives one neutral message for an unknown token', async () => {
       const res = await request(app.getHttpServer()).post('/auth/invite/accept')
         .send({ token: 'not-a-real-token', password: 'a-perfectly-good-password' }).expect(401);
-      expect(res.body.message).toMatch(/no longer valid/);
+      expect(res.body.error.message).toMatch(/no longer valid/);
     });
   });
 

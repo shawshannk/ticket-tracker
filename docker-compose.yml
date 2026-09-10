@@ -55,12 +55,24 @@ services:
       # the defaults in login-rate-limit.ts are the specified values.
       AUTH_LOGIN_RATE_LIMIT: "200"
       NODE_ENV: development
+      # M22. Pretty logs here (NODE_ENV is development); production emits JSON.
+      LOG_LEVEL: debug
+      # Sentry is inert without a DSN, so nothing is sent from a Compose run.
+      # SENTRY_DSN:
     depends_on:
       postgres:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
     ports: ["3000:3000"]
+    # Compose can now wait for the API the same way it waits for Postgres — liveness only, since
+    # readiness failing is a reason to stop sending traffic, not to restart (spec 11 §4).
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   web:
     build:
@@ -69,7 +81,9 @@ services:
       args:
         # The browser resolves this, so it must be the host-published API port.
         VITE_API_URL: http://localhost:3000
-    depends_on: [api]
+    depends_on:
+      api:
+        condition: service_healthy
     ports: ["5173:5173"]
 
 volumes:

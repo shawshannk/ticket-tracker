@@ -69,14 +69,42 @@ describe('apiFetch', () => {
     await expect(apiFetch('/tickets/x', { method: 'DELETE' })).resolves.toBeUndefined();
   });
 
-  it('surfaces the API error message and validation issues', async () => {
+  it('surfaces the API error envelope: message, code, details and request id', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'Validation failed',
+          requestId: 'req-123',
+          details: [{ path: 'title', message: 'Required' }],
+        },
+      }),
+    });
+    await expect(apiFetch('/projects/p/tickets', { method: 'POST', body: {} })).rejects.toMatchObject({
+      status: 400,
+      message: 'Validation failed',
+      code: 'VALIDATION_FAILED',
+      requestId: 'req-123',
+      details: [{ path: 'title', message: 'Required' }],
+      // `.issues` is kept as an alias so pre-M22 call sites still read the field they expect.
+      issues: [{ path: 'title', message: 'Required' }],
+    });
+  });
+
+  it('falls back to a flat {message, issues} body for anything not speaking the envelope', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: false,
       status: 400,
       json: async () => ({ message: 'Validation failed', issues: [{ path: 'title', message: 'Required' }] }),
     });
-    await expect(apiFetch('/projects/p/tickets', { method: 'POST', body: {} }))
-      .rejects.toMatchObject({ status: 400, message: 'Validation failed', issues: [{ path: 'title', message: 'Required' }] });
+    await expect(apiFetch('/projects/p/tickets', { method: 'POST', body: {} })).rejects.toMatchObject({
+      status: 400,
+      message: 'Validation failed',
+      code: undefined,
+      issues: [{ path: 'title', message: 'Required' }],
+    });
   });
 
   it('still throws a usable error when the body is not JSON', async () => {

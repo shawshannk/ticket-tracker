@@ -355,6 +355,16 @@ Sizes: S ≈ half a session, M ≈ one session, L must be split before starting 
 - **Source spec**: specs/11-production-hardening.md
 - **Files**: `apps/api/src/config/env.ts` (Zod env schema), `src/common/logging/*` (pino setup, `RequestIdMiddleware`, AsyncLocalStorage context), `src/common/filters/all-exceptions.filter.ts`, `src/common/interceptors/timeout.interceptor.ts`, `src/health/*` (terminus module, `/health/live`, `/health/ready`), `src/main.ts` (helmet, body limit, trust proxy, gated Swagger, shutdown hooks), `packages/shared/src/errors.ts` (`ApiError`, `ERROR_CODES`), `apps/api/Dockerfile`, `apps/web/Dockerfile`, `docker-compose.yml`, `.env.example`.
 - **Acceptance criteria**: per spec 11 "Acceptance criteria" — error-envelope shape asserted for 400/403/404/500; no stack or SQL in any body; `/health/ready` 503 with Postgres down while `/health/live` stays 200; SIGTERM drains in-flight requests; boot fails readably on a missing env var; image runs non-root; `/api` is 404 under `NODE_ENV=production`.
+- **Scope adjusted 2026-09-10 during implementation**:
+  - Pinned `nestjs-pino@4` / `@nestjs/terminus@10`: the current majors need Nest 11 and this
+    module does not upgrade the framework. **Nest 10 → 11 is now a backlog item.**
+  - `apps/web/src/api/client.ts` + its spec joined the file list: the error envelope is a
+    breaking change for the client, which read `payload.message` / `payload.issues`.
+  - `drizzle-kit`, `tsx` and `express` moved from devDependencies to dependencies — the first two
+    because `docker compose run migrate` runs from the production image, the third because
+    `main.ts` imports express directly.
+  - Terminus health reports bypass the error envelope (documented exception); the request timeout
+    returns 503 rather than 408.
 - **Depends on**: M21
 
 ### M23: Ticket event stream (M)
@@ -717,3 +727,5 @@ Sizes: S ≈ half a session, M ≈ one session, L must be split before starting 
 - 2026-09-09: JWT signing-key rotation with overlapping keys (`kid` claims) — single secret today. Still open at Phase 3 planning; a natural companion to M56, not specified.
 - 2026-09-09: Shared-store rate limiting and session cache for multi-instance deploys — **closed 2026-09-10**: Redis arrives in M25; per-token limits specs/22 §4 (M53), caching specs/25 §1 (M59).
 - 2026-09-09: SSO/OIDC as an alternative token issuer (spec 10 §9) — **closed 2026-09-10**: specified in specs/23 §1, planned as M56.
+- 2026-09-10: Upgrade Nest 10 → 11 (unblocks current `nestjs-pino` / `@nestjs/terminus` majors).
+- 2026-09-10: Enforce `SHUTDOWN_TIMEOUT_MS` as a hard deadline — `enableShutdownHooks()` currently drains unbounded.
