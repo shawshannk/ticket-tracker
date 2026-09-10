@@ -61,6 +61,21 @@ export const userUpdateSchema = userCreateSchema.partial().extend({
   status: z.enum(USER_STATUSES).optional(),
 });
 
+// --- Project membership (spec 10 §3.2, tech spec §4.2) ---
+
+/**
+ * A membership grant. The role is the *project* role and is unrelated to the user's global one:
+ * granting `manager` here does not make anyone a manager anywhere else (R13).
+ */
+export const memberAddSchema = z.object({
+  userId: z.string().uuid('Pick a user'),
+  role: userRoleSchema,
+});
+
+export const memberUpdateSchema = z.object({
+  role: userRoleSchema,
+});
+
 // --- Projects ---
 
 export const projectCreateSchema = z.object({

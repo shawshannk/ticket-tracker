@@ -85,7 +85,6 @@ export class AuthGuard implements CanActivate {
     }
 
     req.auth = { user, sessionId: claims.sid, impersonated: false };
-    req.actingUser = user;
   }
 
   private async authenticateWithHeader(req: RequestWithAuth): Promise<boolean> {
@@ -93,10 +92,9 @@ export class AuthGuard implements CanActivate {
     const id = Array.isArray(raw) ? raw[0] : raw;
 
     if (!id) {
-      // v1 semantics: no identity, request proceeds, and RolesGuard answers 403 on any
+      // v1 semantics: no identity, request proceeds, and PermissionGuard answers 403 on any
       // guarded route while open reads stay open.
       req.auth = undefined;
-      req.actingUser = null;
       return true;
     }
 
@@ -110,7 +108,6 @@ export class AuthGuard implements CanActivate {
     }
 
     req.auth = { user, sessionId: null, impersonated: true };
-    req.actingUser = user;
     return true;
   }
 

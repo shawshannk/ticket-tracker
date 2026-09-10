@@ -250,12 +250,25 @@ first that may ship with the flag off.
   - `GET /projects` returns only the caller's memberships — a query-level filter, not a guard (tech spec §6.3).
   - Member add/update/remove works; removing or demoting the last project admin is refused (R18).
   - `PERMISSIONS`/`can()` call sites in `apps/web` compile against the new signatures.
+- **Scope adjusted 2026-09-10 during implementation**:
+  - `PERMISSIONS` split into `PLATFORM_PERMISSIONS` / `PROJECT_PERMISSIONS` with separate action
+    types and separate decorators (`@RequirePlatform` / `@RequireProject`), because the two are
+    answered from different roles and one map made the wrong role easy to pass.
+  - Tech spec §5.3 (`actingUser: User` → `auth: AuthContext`) pulled forward for
+    `CreateTicketCommand` and `AddCommentCommand` only — the epic gate must read the *effective*
+    project role for R13. The remaining command signatures stay with M19.
+  - `create-ticket` now writes `tickets.reporter_id`, which nothing had populated since M15 added
+    it. M19's ownership rule reads only that column and would have failed open without this.
+  - `CreateProjectCommand` makes its creator a project admin in the same transaction, so R18's
+    project half holds from the moment a project exists.
+  - `DELETE /tickets/:id` keeps its manager/admin route gate for one more module; M19 replaces it
+    with the ownership check that also admits the reporter.
 - **Depends on**: M17
 
 ### M19: Record-level ownership & comment editing (M)
 - **Goal**: The rules that need the row, enforced where the row is loaded.
 - **Source spec**: docs/auth-tech-spec.md §5.2–5.3; spec 10 §3.3, R14
-- **Files**: `apps/api/src/auth/ownership.ts`, `apps/api/src/tickets/commands/delete-ticket.command.ts`, `update-ticket.command.ts`, new `update-comment.command.ts` + `delete-comment.command.ts`, `apps/api/src/tickets/comments.controller.ts`, all command constructors (`actingUser: User` → `auth: AuthContext`).
+- **Files**: `apps/api/src/auth/ownership.ts`, `apps/api/src/tickets/commands/delete-ticket.command.ts`, `update-ticket.command.ts`, new `update-comment.command.ts` + `delete-comment.command.ts`, `apps/api/src/tickets/comments.controller.ts`, all remaining command constructors (`actingUser: User` → `auth: AuthContext`; create-ticket and add-comment already converted in M18), and `tickets.controller.ts` — the `@RequireProject('ticket.delete')` route gate comes off as `assertCanDeleteTicket` goes in. New comment routes use `@ProjectScope('comment')`, which M18 built.
 - **Acceptance criteria**:
   - A project developer may delete a ticket they reported, and may not delete one they did not.
   - Authorization reads `tickets.reporter_id` (added in M15), **never** the `reporter` display-name text. A null `reporter_id` fails the ownership check and falls back to manager/admin.

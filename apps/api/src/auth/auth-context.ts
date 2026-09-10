@@ -2,8 +2,8 @@ import type { User, UserRole } from '@ticket-tracker/shared';
 import type { Request } from 'express';
 
 /**
- * Everything a request knows about who is making it. Built by AuthGuard, read by the
- * permission guards and by command handlers that enforce ownership (M19).
+ * Everything a request knows about who is making it. Built by AuthGuard, extended by
+ * ProjectScopeGuard, read by PermissionGuard and by command handlers.
  */
 export interface AuthContext {
   user: User;
@@ -12,8 +12,9 @@ export interface AuthContext {
   /** True when this identity came from the dev impersonation header, not a verified token. */
   impersonated: boolean;
   /**
-   * Set by ProjectScopeGuard in M18: the effective role for the project this request touches.
-   * Absent on routes that touch no project.
+   * Set by ProjectScopeGuard on `@ProjectScope` routes: the project this request touches and
+   * the caller's effective role in it (spec 10 §3.2). Absent on routes that touch no project,
+   * and — while AUTH_DEV_IMPERSONATION is on — on a request that carried no identity.
    */
   projectId?: string;
   projectRole?: UserRole;
@@ -21,9 +22,4 @@ export interface AuthContext {
 
 export interface RequestWithAuth extends Request {
   auth?: AuthContext;
-  /**
-   * Mirror of `auth.user`, kept so the M3-era `@ActingUser()` decorator and `RolesGuard` keep
-   * working until M18 replaces them. Remove with RolesGuard.
-   */
-  actingUser?: User | null;
 }

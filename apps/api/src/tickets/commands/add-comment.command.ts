@@ -1,8 +1,9 @@
 import { Inject, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import type { Comment, CommentCreateDto, User } from '@ticket-tracker/shared';
+import type { Comment, CommentCreateDto } from '@ticket-tracker/shared';
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../db';
+import type { AuthContext } from '../../auth/auth-context';
 import { DB } from '../../db/db.module';
 import { comments, tickets } from '../../db/schema';
 
@@ -10,7 +11,7 @@ export class AddCommentCommand {
   constructor(
     readonly ticketId: string,
     readonly input: CommentCreateDto,
-    readonly actingUser: User,
+    readonly auth: AuthContext,
   ) {}
 }
 
@@ -24,7 +25,7 @@ export class AddCommentCommand {
 export class AddCommentHandler implements ICommandHandler<AddCommentCommand, Comment> {
   constructor(@Inject(DB) private readonly db: Db) {}
 
-  async execute({ ticketId, input, actingUser }: AddCommentCommand): Promise<Comment> {
+  async execute({ ticketId, input, auth }: AddCommentCommand): Promise<Comment> {
     return this.db.transaction(async (tx) => {
       const [ticket] = await tx
         .select({ id: tickets.id })
@@ -37,7 +38,7 @@ export class AddCommentHandler implements ICommandHandler<AddCommentCommand, Com
 
       const [row] = await tx
         .insert(comments)
-        .values({ ticketId, authorId: actingUser.id, body: input.body })
+        .values({ ticketId, authorId: auth.user.id, body: input.body })
         .returning();
 
       // Commenting is activity on the ticket, so the detail/overview "recently updated"

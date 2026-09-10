@@ -25,7 +25,7 @@ function Loaded({ user }: { user: User }) {
   const { data: users = [] } = useUsers();
   const actingUserId = useActingUserStore((s) => s.actingUserId);
   // Spec 07: only an Admin may edit. Everyone else sees the read-only summary below.
-  const canManage = can('manageUsers', users.find((u) => u.id === actingUserId)?.role);
+  const canManage = can('user.manage', users.find((u) => u.id === actingUserId)?.role);
 
   const update = useUpdateUser();
   const errors = useMemo(() => validate(form, 'update'), [form]);

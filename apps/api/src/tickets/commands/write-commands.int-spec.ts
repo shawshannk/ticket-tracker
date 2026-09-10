@@ -11,6 +11,7 @@ import { CreateTicketCommand, CreateTicketHandler } from './create-ticket.comman
 import { DeleteTicketCommand, DeleteTicketHandler } from './delete-ticket.command';
 import { MoveTicketStatusCommand, MoveTicketStatusHandler } from './move-ticket-status.command';
 import { UpdateTicketCommand, UpdateTicketHandler } from './update-ticket.command';
+import { authContextFor } from '../../auth/auth-context.fixture';
 
 const MISSING = '00000000-0000-4000-8000-000000000009';
 
@@ -57,14 +58,14 @@ describe('ticket write commands (integration)', () => {
   const actor = (role: UserRole = 'manager'): User => ({ ...seededUser, role });
 
   const mkEpic = (title = 'Epic') =>
-    create.execute(new CreateTicketCommand(projectId, { type: 'epic', title, description: '', labels: [], priority: 'medium' }, actor()));
+    create.execute(new CreateTicketCommand(projectId, { type: 'epic', title, description: '', labels: [], priority: 'medium' }, authContextFor(actor())));
 
   const mkStory = (epicId: string) =>
     create.execute(
       new CreateTicketCommand(
         projectId,
         { type: 'story', title: 'Story', description: '', labels: [], priority: 'medium', env: 'staging', size: 'm', epicId } as TicketCreateDto,
-        actor(),
+        authContextFor(actor()),
       ),
     );
 
@@ -73,7 +74,7 @@ describe('ticket write commands (integration)', () => {
       new CreateTicketCommand(
         projectId,
         { type: 'bug', title: 'Bug', description: '', labels: [], priority: 'low', env: 'staging', size: 's', severity: '3', epicId, storyId: storyId ?? null } as TicketCreateDto,
-        actor(),
+        authContextFor(actor()),
       ),
     );
 
@@ -153,7 +154,7 @@ describe('ticket write commands (integration)', () => {
   describe('AddComment', () => {
     it('takes author_id from the acting user, not the body (R6)', async () => {
       const epic = await mkEpic();
-      const created = await comment.execute(new AddCommentCommand(epic.id, { body: 'Looks good' }, actor()));
+      const created = await comment.execute(new AddCommentCommand(epic.id, { body: 'Looks good' }, authContextFor(actor())));
       expect(created.authorId).toBe(seededUser.id);
       expect(created.body).toBe('Looks good');
 
@@ -164,20 +165,20 @@ describe('ticket write commands (integration)', () => {
     it('advances the ticket updated_at', async () => {
       const epic = await mkEpic();
       await new Promise((r) => setTimeout(r, 5));
-      await comment.execute(new AddCommentCommand(epic.id, { body: 'ping' }, actor()));
+      await comment.execute(new AddCommentCommand(epic.id, { body: 'ping' }, authContextFor(actor())));
       const [row] = await db.select().from(tickets).where(eq(tickets.id, epic.id));
       expect(row.updatedAt.getTime()).toBeGreaterThan(new Date(epic.updatedAt).getTime());
     });
 
     it('404s an unknown ticket', async () => {
-      await expect(comment.execute(new AddCommentCommand(MISSING, { body: 'x' }, actor()))).rejects.toThrow(NotFoundException);
+      await expect(comment.execute(new AddCommentCommand(MISSING, { body: 'x' }, authContextFor(actor())))).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('DeleteTicket', () => {
     it('deletes a leaf ticket and cascades its comments', async () => {
       const epic = await mkEpic();
-      const created = await comment.execute(new AddCommentCommand(epic.id, { body: 'bye' }, actor()));
+      const created = await comment.execute(new AddCommentCommand(epic.id, { body: 'bye' }, authContextFor(actor())));
 
       await remove.execute(new DeleteTicketCommand(epic.id));
 

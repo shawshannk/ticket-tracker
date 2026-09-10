@@ -69,7 +69,9 @@ function Loaded({ ticket, projectId }: { ticket: TicketDetail; projectId: string
   const actingUserId = useActingUserStore((s) => s.actingUserId);
   const actingRole = users.find((u) => u.id === actingUserId)?.role;
   // Spec 05: delete is Admin/Manager only. Hiding it is UX — the server enforces it (R3).
-  const canDelete = can('deleteTicket', actingRole);
+  // The *global* role, not the project one. Correct only because every seeded user holds the
+  // same role in every project; M20's `useCan()` resolves the real effective role (R13).
+  const canDelete = can('ticket.delete', actingRole);
 
   const [savedAt, setSavedAt] = useState(0);
   useEffect(() => {

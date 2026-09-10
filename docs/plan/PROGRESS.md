@@ -30,7 +30,7 @@ Phase 2 (M15–M21) derived from `specs/10-authentication-and-authorization.md` 
 | M15 Auth schema, migration & backfill | done | specs/10, docs/auth-tech-spec §2 (2026-09-09) | 2026-09-09 |
 | M16 Password, invite & token services | done | docs/auth-tech-spec §3 (2026-09-09) | 2026-09-09 |
 | M17 Auth endpoints & AuthGuard | done | specs/10 §4, tech-spec §4.1 (2026-09-09) | 2026-09-09 |
-| M18 Project membership & scope guard | **not started** | specs/10 §3.2, tech-spec §5 (2026-09-09) | — |
+| M18 Project membership & scope guard | done | specs/10 §3.2, tech-spec §5 (2026-09-09) | 2026-09-10 |
 | M19 Record-level ownership | **not started** | specs/10 §3.3, tech-spec §5.2 (2026-09-09) | — |
 | M20 Web auth flow | **not started** | specs/10 §6, tech-spec §7 (2026-09-09) | — |
 | M21 Members UI, invites & cutover | **not started** | specs/10 §4.5, tech-spec §9 (2026-09-09) | — |
@@ -1393,3 +1393,108 @@ screen until M20 — that is what `AUTH_DEV_IMPERSONATION` is for.
     Turning the flag off in Compose before M20 will make the web app unusable, by design.
 
 - **Next**: M18 — project membership & scope guard. No blockers.
+
+### M18 — Project membership & scope guard (done, 2026-09-10)
+
+Per-project roles are enforced, and a non-member can no longer tell a project exists. The app
+still runs on `AUTH_DEV_IMPERSONATION`; the flag's anonymous branch is what keeps the pre-M20
+web app working, and it is now the *only* thing that does.
+
+- **Files created**: `apps/api/src/auth/` — `project-scope.guard.ts`, `project-scope.decorator.ts`,
+  `permission.guard.ts`, `require.decorator.ts`, `auth-context.fixture.ts`, `permissions.spec.ts`
+  (64), `project-scope.int-spec.ts` (26); `apps/api/src/projects/` — `members.controller.ts`,
+  `queries/get-members.query.ts`, `commands/{add,update,remove}-member.command.ts`,
+  `commands/project-admins.ts`.
+- **Files deleted**: `apps/api/src/auth/` — `roles.guard.ts`, `roles.guard.spec.ts`,
+  `roles.decorator.ts`, `acting-user.decorator.ts`, `permissions.ts` (the re-export shim).
+- **Files modified**: `packages/shared/src/{permissions,schemas,types}.ts`;
+  `apps/api/src/auth/{auth-context,auth.guard,auth.module}.ts`;
+  `apps/api/src/{users/users.controller,projects/projects.controller,projects/projects.module,tickets/tickets.controller}.ts`;
+  `apps/api/src/projects/queries/get-projects.query.ts`;
+  `apps/api/src/projects/commands/create-project.command.ts`;
+  `apps/api/src/tickets/commands/{create-ticket,add-comment}.command.ts`; four ticket int-specs;
+  `apps/web/src/features/{ticket-detail/TicketDetailPage,create-ticket/CreateTicketPage,people/CreateUserPage,people/UserDetailPage,people/PeoplePage}.tsx`.
+
+- **The decision that shaped the rest — two permission maps, not one.** `PERMISSIONS` became
+  `PLATFORM_PERMISSIONS` + `PROJECT_PERMISSIONS`, with `PlatformAction` and `ProjectAction` as
+  separate types and `@RequirePlatform` / `@RequireProject` as separate decorators. The two are
+  answered from *different roles* — global vs effective — and a single map made it trivially easy
+  to hand `can()` whichever role was in scope and be wrong half the time. Split, the wrong one is
+  a type error. `can()` itself stays one function over the union, because the ownership helpers
+  (M19) and the frontend both want a single call shape.
+
+- **Decisions and deviations**:
+  1. **Everything ProjectScopeGuard refuses is a 404, including the body text.** The suite asserts
+     that a real-but-invisible project and a made-up uuid produce the same status *and* the same
+     message; a differing message is an existence oracle just as much as a differing code is.
+  2. **`GET /projects` filters in the query, not a guard**, and `GetProjectsHandler` carries a
+     comment saying why: a list has no single project to resolve, so a guard structurally cannot
+     do it. A platform admin skips the join entirely — filtering them by membership would hide
+     projects they can in fact open.
+  3. **`DELETE /tickets/:id` keeps a `@RequireProject('ticket.delete')` route gate**, even though
+     the tech spec's end state puts that decision in the handler. Spec 10 §3.3 also allows the
+     reporter, which needs the row — that is M19. Dropping the route gate first would have opened
+     deletion to every project member for a whole module.
+  4. **`CreateTicketCommand` and `AddCommentCommand` now take `auth: AuthContext`**, not
+     `actingUser: User` — §5.3's change, pulled forward for these two because the epic gate has to
+     read `auth.projectRole` to satisfy R13. The rest of §5.3 is still M19's.
+  5. **Creating a project makes the creator a project admin**, in the same transaction. Otherwise
+     a fresh project has zero members and violates R18 from the moment it exists.
+  6. **`create-ticket` now writes `reporter_id`.** It never did — M15 added the column and
+     backfilled it, but nothing populated it for new rows, so every ticket created since M15 had
+     a null FK. M19's ownership rule reads *only* that column, so this would have failed open to
+     "manager or admin" on every recent ticket and looked like correct behaviour.
+  7. **The project last-admin refusal returns 400, not 409**, matching `UpdateUserCommand`'s
+     platform half. Both refusals should read alike to a client.
+  8. **Adding a non-existent `userId` is 400, not 404.** On these routes 404 already means "no
+     such project, as far as you are concerned"; reusing it here would blur R12.
+  9. **`auth-context.fixture.ts` is test-only**, named to say so. Handler-level int-specs call
+     commands directly and never run the guards that would populate an `AuthContext`.
+
+- **Verification**:
+  | Check | Result |
+  |---|---|
+  | API unit | 127 passed (was 101): `permissions.spec.ts` adds 64, `roles.guard.spec.ts` removed |
+  | API integration | 126 passed (was 100; +26) |
+  | Web unit | 56 passed, unchanged |
+  | typecheck / build | clean; 5 pre-existing web lint warnings, 0 errors |
+  | **e2e, unchanged, against a rebuilt Compose stack** | **5/5 passed** |
+  | Non-member on project / tickets / board / overview / sprints / members / `GET /tickets/:id` | 404 on all seven (R12) |
+  | Non-member vs. non-existent project | identical status and message |
+  | Non-member write | 404, not 403 |
+  | Global manager + project developer creates an epic | 403 (R13) |
+  | Global developer + project manager creates an epic | 201 (R13) |
+  | Global admin with no membership row | 200 on project and members (superuser bypass) |
+  | `GET /projects` as member / non-member / platform admin | own only / empty / all |
+  | Member add → re-role → remove, effective on the next request | 204/204/204, then 404 |
+  | Demote or remove the last project admin | 400 both; allowed once a second admin exists |
+  | `membership_changed` audit event with actor and project | recorded (R19) |
+  | Dev config: anonymous reads, anonymous epic-create, impersonated developer epic-create | 200 / 403 / 403 — v1 behaviour intact |
+
+- **Gotchas for the next session (M19)**:
+  - **Guard order is now four deep** — throttle → Auth → ProjectScope → Permission — and each
+    reads what the previous wrote. Reordering the `APP_GUARD` entries in `auth.module.ts`
+    unguards routes silently rather than failing.
+  - **`@RequireProject` without `@ProjectScope` throws 500, deliberately.** There is no effective
+    role to check, and a 403 there would look like policy while hiding an unscoped route.
+  - **A route with no `@ProjectScope` is not scoped at all.** Nothing infers it from a
+    `projectId` param. Any new project-scoped route M19+ adds must carry the decorator —
+    `@ProjectScope('comment')` already exists for `PATCH`/`DELETE /comments/:id`.
+  - **`auth.projectRole` is `undefined`, not null, for a non-member** — but a non-member never
+    reaches a handler, because the guard 404s first. Inside a handler, `undefined` means the
+    route carries no `@ProjectScope`, which for M19's ownership helpers is a bug, not a denial.
+  - **`ProjectScopeGuard` adds one query on `param` routes and two on `ticket`/`comment` routes**,
+    on top of AuthGuard's two. If that becomes a problem, merge them into one guard rather than
+    caching across requests — the per-request read is what makes R15 and instant member-removal true.
+  - **`GET /auth/me` still returns `{user, memberships}`**, not the `permissions` field the tech
+    spec's §4.1 table lists. Nothing consumes it yet; M20's `useCan()` is the natural place to
+    decide whether it wants a computed map or just the two matrices from `shared`.
+  - **The web app still calls `can()` with the caller's *global* role** in TicketDetailPage and
+    CreateTicketPage. That is correct only because every seeded user holds the same role in every
+    project. Both sites carry a comment; M20's `useCan()` is what actually fixes it. The server
+    re-checks either way, so it is a cosmetic bug, not a hole.
+  - **`create-ticket.int-spec` now inserts a real user** — a synthetic actor uuid stopped being
+    insertable the moment `reporter_id` was populated. Any new spec that creates tickets directly
+    needs a real `users` row too.
+
+- **Next**: M19 — record-level ownership & comment editing. No blockers.

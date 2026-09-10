@@ -16,7 +16,7 @@ export function PeoplePage() {
   const actingUserId = useActingUserStore((s) => s.actingUserId);
   const actingRole = users?.find((u) => u.id === actingUserId)?.role;
   // Spec 07: "Add team member" is Admin-only. Hiding it is UX; the server enforces it (R3).
-  const canManage = can('manageUsers', actingRole);
+  const canManage = can('user.manage', actingRole);
 
   if (isPending) return <LoadingPanel label="Loading people…" />;
   if (error) return <ErrorPanel error={error} onRetry={() => refetch()} />;

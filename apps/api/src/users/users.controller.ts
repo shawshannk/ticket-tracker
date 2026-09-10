@@ -5,16 +5,16 @@ import { userCreateSchema, userUpdateSchema, type User, type UserCreateDto, type
 import { ApiBearerAuth } from '@nestjs/swagger';
 import type { AuthContext } from '../auth/auth-context';
 import { Auth } from '../auth/current-user.decorator';
-import { PERMISSIONS } from '../auth/permissions';
-import { Roles } from '../auth/roles.decorator';
+import { RequirePlatform } from '../auth/require.decorator';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { CreateUserCommand, type CreatedUser } from './commands/create-user.command';
 import { UpdateUserCommand } from './commands/update-user.command';
 import { GetUserQuery } from './queries/get-user.query';
 import { GetUsersQuery } from './queries/get-users.query';
 
-// Users are global, not project-scoped (spec 00). Reads are open; writes are Admin-only
-// (spec 07), enforced by RolesGuard rather than only hidden in the UI.
+// Users are global, not project-scoped (spec 00), so these routes carry platform permissions
+// and no @ProjectScope. Writes are Admin-only (spec 07), enforced by PermissionGuard rather
+// than only hidden in the UI.
 @ApiTags('users')
 @Controller('users')
 export class UsersController {
@@ -40,7 +40,7 @@ export class UsersController {
    * `invited` until that link is accepted, so it cannot log in before then.
    */
   @Post()
-  @Roles(...PERMISSIONS.manageUsers)
+  @RequirePlatform('user.manage')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a user and issue an invite link (Admin only)' })
   create(
@@ -51,7 +51,7 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @Roles(...PERMISSIONS.manageUsers)
+  @RequirePlatform('user.manage')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a user, including disabling them (Admin only)' })
   update(

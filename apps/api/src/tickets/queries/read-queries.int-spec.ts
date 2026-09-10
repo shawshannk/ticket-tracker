@@ -10,6 +10,7 @@ import { AddCommentCommand, AddCommentHandler } from '../commands/add-comment.co
 import { CreateTicketCommand, CreateTicketHandler } from '../commands/create-ticket.command';
 import { GetTicketDetailHandler, GetTicketDetailQuery } from './get-ticket-detail.query';
 import { GetTicketsHandler, GetTicketsQuery } from './get-tickets.query';
+import { authContextFor } from '../../auth/auth-context.fixture';
 
 // Integration test — needs the Compose Postgres up. The list is all SQL, so the only honest
 // way to test filters/search/paging/sort and R2 isolation is against real rows.
@@ -55,7 +56,7 @@ describe('ticket read queries (integration)', () => {
     projectB = await makeProject('YRB');
 
     const mk = (projectId: string, input: TicketCreateDto, actor: User = alice) =>
-      create.execute(new CreateTicketCommand(projectId, input, { ...actor, role: 'manager' }));
+      create.execute(new CreateTicketCommand(projectId, input, authContextFor(actor, 'manager')));
 
     epic1 = (await mk(projectA, { type: 'epic', title: 'Payments platform', description: '', labels: [], priority: 'medium' })).id;
     epic2 = (await mk(projectA, { type: 'epic', title: 'Mobile onboarding', description: '', labels: [], priority: 'high' })).id;
@@ -196,8 +197,8 @@ describe('ticket read queries (integration)', () => {
     });
 
     it('lists comments oldest-first with their authors', async () => {
-      await comment.execute(new AddCommentCommand(story1, { body: 'first' }, alice));
-      await comment.execute(new AddCommentCommand(story1, { body: 'second' }, bob));
+      await comment.execute(new AddCommentCommand(story1, { body: 'first' }, authContextFor(alice)));
+      await comment.execute(new AddCommentCommand(story1, { body: 'second' }, authContextFor(bob)));
       const d = await detail.execute(new GetTicketDetailQuery(story1));
       expect(d.comments.map((c) => [c.body, c.author.name])).toEqual([
         ['first', alice.name],

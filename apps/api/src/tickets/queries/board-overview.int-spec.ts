@@ -9,6 +9,7 @@ import { TicketKeyService } from '../../projects/ticket-key.service';
 import { CreateTicketCommand, CreateTicketHandler } from '../commands/create-ticket.command';
 import { GetBoardHandler, GetBoardQuery } from './get-board.query';
 import { GetOverviewStatsHandler, GetOverviewStatsQuery } from './get-overview-stats.query';
+import { authContextFor } from '../../auth/auth-context.fixture';
 
 // Integration test — needs the Compose Postgres up. The overview is a raw aggregation and the
 // board is a filtered join, so both are only meaningfully testable against real rows.
@@ -58,7 +59,7 @@ describe('board + overview queries (integration)', () => {
     sprint2 = s2.id;
 
     const mk = (projectId: string, input: TicketCreateDto) =>
-      create.execute(new CreateTicketCommand(projectId, input, actor));
+      create.execute(new CreateTicketCommand(projectId, input, authContextFor(actor)));
 
     epicA = (await mk(projectA, { type: 'epic', title: 'Epic A', description: '', labels: [], priority: 'medium' })).id;
     const story1 = await mk(projectA, {

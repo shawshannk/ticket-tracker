@@ -15,7 +15,7 @@ export function CreateUserPage() {
 
   const { data: users = [] } = useUsers();
   const actingUserId = useActingUserStore((s) => s.actingUserId);
-  const canManage = can('manageUsers', users.find((u) => u.id === actingUserId)?.role);
+  const canManage = can('user.manage', users.find((u) => u.id === actingUserId)?.role);
 
   const create = useCreateUser();
   const errors = useMemo(() => validate(form, 'create'), [form]);

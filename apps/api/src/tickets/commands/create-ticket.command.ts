@@ -1,10 +1,10 @@
 import { ForbiddenException, Inject } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import type { Ticket, TicketCreateDto, User } from '@ticket-tracker/shared';
+import { can, type Ticket, type TicketCreateDto } from '@ticket-tracker/shared';
 import type { Db } from '../../db';
+import type { AuthContext } from '../../auth/auth-context';
 import { DB } from '../../db/db.module';
 import { tickets } from '../../db/schema';
-import { can } from '../../auth/permissions';
 import { TicketKeyService } from '../../projects/ticket-key.service';
 import { toTicket } from '../ticket.mapper';
 import { assertParentLinks } from '../ticket-links';
@@ -14,7 +14,8 @@ export class CreateTicketCommand {
   constructor(
     readonly projectId: string,
     readonly input: TicketCreateDto,
-    readonly actingUser: User,
+    /** The full request context: the epic gate reads the *project* role, not the global one. */
+    readonly auth: AuthContext,
   ) {}
 }
 
@@ -25,12 +26,16 @@ export class CreateTicketHandler implements ICommandHandler<CreateTicketCommand,
     private readonly ticketKeys: TicketKeyService,
   ) {}
 
-  async execute({ projectId, input, actingUser }: CreateTicketCommand): Promise<Ticket> {
-    // The frontend hides the Epic option from Developers; spec 06 requires re-checking it
-    // here, because hiding a control is UX, not enforcement. This can't be a route-level
-    // @Roles since it depends on the body's `type`.
-    if (input.type === 'epic' && !can('createEpic', actingUser.role)) {
-      throw new ForbiddenException(`Role "${actingUser.role}" cannot create an epic`);
+  async execute({ projectId, input, auth }: CreateTicketCommand): Promise<Ticket> {
+    // The frontend hides the Epic option from Developers; spec 06 requires re-checking it here,
+    // because hiding a control is UX, not enforcement. It can't be a route-level decorator since
+    // it depends on the body's `type`.
+    //
+    // R13: the role consulted is `auth.projectRole`, resolved by ProjectScopeGuard for *this*
+    // project — a global manager who is a developer here cannot create an epic here, and a
+    // global developer who is a manager here can.
+    if (input.type === 'epic' && !can('ticket.createEpic', auth.projectRole)) {
+      throw new ForbiddenException(`Project role "${auth.projectRole ?? 'none'}" cannot create an epic`);
     }
 
     // One transaction: the key allocation and the insert succeed or fail together, so a
@@ -60,8 +65,11 @@ export class CreateTicketHandler implements ICommandHandler<CreateTicketCommand,
           severity: input.type === 'bug' ? input.severity : null,
           assigneeId: input.assigneeId ?? null,
           // spec 06's open question, resolved in PLAN.md: reporter is the acting user, never
-          // client-supplied. Free text, not an FK (spec 00).
-          reporter: actingUser.name,
+          // client-supplied. `reporter` is the free-text display name v1 stored; `reporterId` is
+          // the FK M15 added and the only thing M19's ownership check may read — a ticket created
+          // without it would silently fall through to the manager/admin branch forever.
+          reporter: auth.user.name,
+          reporterId: auth.user.id,
           labels: input.labels,
           env: input.type === 'epic' ? null : input.env,
           size: input.type === 'epic' ? null : input.size,

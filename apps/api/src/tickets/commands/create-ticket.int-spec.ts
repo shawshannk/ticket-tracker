@@ -4,9 +4,10 @@ import type { TicketCreateDto, User, UserRole } from '@ticket-tracker/shared';
 import { eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../../db';
-import { projects, tickets } from '../../db/schema';
+import { projects, tickets, users } from '../../db/schema';
 import { TicketKeyService } from '../../projects/ticket-key.service';
 import { CreateTicketCommand, CreateTicketHandler } from './create-ticket.command';
+import { authContextFor } from '../../auth/auth-context.fixture';
 
 // Integration test — needs the Compose Postgres up. Covers the parts of create that only a
 // real database can show: the key sequence, the transaction boundary, and the link
@@ -18,8 +19,12 @@ describe('CreateTicketHandler (integration)', () => {
   let otherProjectId: string;
   const createdProjects: string[] = [];
 
+  // A real row, because `tickets.reporter_id` is a foreign key (added in M15) and create now
+  // populates it — a synthetic uuid stopped being insertable.
+  let actorId: string;
+
   const actor = (role: UserRole): User => ({
-    id: '00000000-0000-4000-8000-000000000001',
+    id: actorId,
     name: role === 'admin' ? 'Ada Admin' : role === 'manager' ? 'Mo Manager' : 'Dev Dever',
     email: `${role}@nimbus.io`,
     department: 'Engineering',
@@ -29,7 +34,7 @@ describe('CreateTicketHandler (integration)', () => {
   });
 
   const run = (input: TicketCreateDto, role: UserRole = 'manager', inProject = projectId) =>
-    handler.execute(new CreateTicketCommand(inProject, input, actor(role)));
+    handler.execute(new CreateTicketCommand(inProject, input, authContextFor(actor(role))));
 
   const epicInput = (title = 'An epic'): TicketCreateDto => ({
     type: 'epic',
@@ -65,6 +70,14 @@ describe('CreateTicketHandler (integration)', () => {
 
   beforeAll(async () => {
     db = createDb();
+    const [row] = await db
+      .insert(users)
+      .values({
+        name: 'Create Ticket Actor', email: `create-ticket-${Date.now()}@nimbus.io`,
+        department: 'Engineering', role: 'manager', status: 'active',
+      })
+      .returning();
+    actorId = row.id;
     handler = new CreateTicketHandler(db, new TicketKeyService(db));
     projectId = await makeProject('YYA');
     otherProjectId = await makeProject('YYB');
@@ -75,6 +88,7 @@ describe('CreateTicketHandler (integration)', () => {
       await db.delete(tickets).where(inArray(tickets.projectId, createdProjects));
       await db.delete(projects).where(inArray(projects.id, createdProjects));
     }
+    if (actorId) await db.delete(users).where(eq(users.id, actorId));
   });
 
   it('allocates sequential keys from the project prefix', async () => {
@@ -87,6 +101,9 @@ describe('CreateTicketHandler (integration)', () => {
   it('sets reporter from the acting user, never from the payload', async () => {
     const ticket = await run(epicInput(), 'admin');
     expect(ticket.reporter).toBe('Ada Admin');
+    // The FK, not just the display name: M19's ownership rules may read only this column.
+    const [stored] = await db.select({ reporterId: tickets.reporterId }).from(tickets).where(eq(tickets.id, ticket.id));
+    expect(stored.reporterId).toBe(actorId);
   });
 
   it('starts each type in its own default status', async () => {

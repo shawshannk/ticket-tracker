@@ -13,6 +13,8 @@ import {
   bugCreateSchema,
   inviteAcceptSchema,
   loginSchema,
+  memberAddSchema,
+  memberUpdateSchema,
   passwordChangeSchema,
   commentCreateSchema,
   epicCreateSchema,
@@ -201,6 +203,27 @@ export type InviteAcceptDto = z.infer<typeof inviteAcceptSchema>;
 export interface Membership {
   projectId: string;
   role: UserRole;
+}
+
+export type MemberAddDto = z.infer<typeof memberAddSchema>;
+export type MemberUpdateDto = z.infer<typeof memberUpdateSchema>;
+
+/**
+ * One row of a project's member table (spec 10 §6, "Project settings → Members"). Carries the
+ * user's display fields so the table needs no second request, but **not** their email: who may
+ * see an address is a platform-admin question (tech spec §4.4), and a project manager listing
+ * their own members is not that.
+ */
+export interface ProjectMemberSummary {
+  projectId: string;
+  userId: string;
+  /** The project role, which overrides the global one inside this project. */
+  role: UserRole;
+  name: string;
+  department: Department;
+  /** The user's global role, shown so an admin's platform-wide access is not invisible here. */
+  globalRole: UserRole;
+  createdAt: string;
 }
 
 /** One active session, for the "where am I signed in" view (spec 10 §4.3). */

@@ -37,7 +37,9 @@ export function CreateTicketPage() {
   const actingRole = users.find((u) => u.id === actingUserId)?.role;
   // Spec 06: the Epic option is *hidden* for Developers, not merely disabled. The server
   // re-checks this (M5a) — hiding it is only UX.
-  const allowedTypes = TICKET_TYPES.filter((t) => t !== 'epic' || can('createEpic', actingRole));
+  // Global role again — see TicketDetailPage. The server re-checks against the effective
+  // project role regardless, so a wrong guess here is a cosmetic bug, not a hole.
+  const allowedTypes = TICKET_TYPES.filter((t) => t !== 'epic' || can('ticket.createEpic', actingRole));
 
   const create = useCreateTicket(projectId);
   const set = <K extends keyof CreateForm>(field: K, value: CreateForm[K]) =>
