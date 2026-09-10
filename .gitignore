@@ -26,6 +26,12 @@ playwright-report/
 test-results/
 .playwright/
 
+# Agent tooling
+# A mirror of the tracked project skill in .claude/skills/, written by the harness when a skill
+# is invoked. Ignored rather than committed so the same skill does not live in git twice —
+# .claude/skills/ stays the source of truth.
+.agents/
+
 # Editor / OS
 .DS_Store
 Thumbs.db
