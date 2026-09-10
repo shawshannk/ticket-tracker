@@ -2,7 +2,8 @@
 
 **Spec fingerprint**: PLAN.md Phase 1 (M1–M14) derived from spec files as of 2026-07-15;
 Phase 2 (M15–M21) derived from `specs/10-authentication-and-authorization.md` and
-`docs/auth-tech-spec.md` as of 2026-09-09.
+`docs/auth-tech-spec.md` as of 2026-09-09; Phase 3 (M22–M70) derived from `specs/11`–`specs/28`
+as of 2026-09-10.
 **Reference fingerprint**: `reference/Ticket Dashboard.dc.html` consulted as of 2026-07-15
 (behavioral/visual reference only — not requirements).
 <!-- Phase 3 compares current spec files against this before resuming.
@@ -34,6 +35,57 @@ Phase 2 (M15–M21) derived from `specs/10-authentication-and-authorization.md` 
 | M19 Record-level ownership | done | specs/10 §3.3, tech-spec §5.2 (2026-09-09) | 2026-09-10 |
 | M20 Web auth flow | done | specs/10 §6, tech-spec §7 (2026-09-09) | 2026-09-10 |
 | M21 Members UI, invites & cutover | done | specs/10 §4.5, tech-spec §9 (2026-09-09) | 2026-09-10 |
+| M22 Production hardening | pending | specs/11 (2026-09-10) | — |
+| M23 Ticket event stream | pending | specs/12 §1–3 (2026-09-10) | — |
+| M24 Soft delete & trash | pending | specs/12 §4–5 (2026-09-10) | — |
+| M25 Job runner & outbox | pending | specs/13 §1–2 (2026-09-10) | — |
+| M26 Transactional email | pending | specs/13 §3–4 (2026-09-10) | — |
+| M27 Notification core & watchers | pending | specs/14 §1–3, §5 (2026-09-10) | — |
+| M28 Mentions & digests | pending | specs/14 §3–4, §6 (2026-09-10) | — |
+| M29 Sprint lifecycle | pending | specs/15 §1 (2026-09-10) | — |
+| M30 Backlog ranking & view | pending | specs/15 §2–3 (2026-09-10) | — |
+| M31 Estimation & agile charts | pending | specs/15 §4–5 (2026-09-10) | — |
+| M32 Board configuration | pending | specs/15 §6 (2026-09-10) | — |
+| M33 Attachments | pending | specs/16 §1–2, §4 (2026-09-10) | — |
+| M34 Rich text & md migration | pending | specs/16 §3–4 (2026-09-10) | — |
+| M35 Ticket links & sub-tasks | pending | specs/20 §1–2 (2026-09-10) | — |
+| M36 Label registry & templates | pending | specs/20 §3–4 (2026-09-10) | — |
+| M37 Custom fields | pending | specs/20 §5 (2026-09-10) | — |
+| M38 Bulk ops, clone/convert/move | pending | specs/20 §6–7 (2026-09-10) | — |
+| M39 Full-text & cross-project search | pending | specs/17 §1–2 (2026-09-10) | — |
+| M40 TQL query language | pending | specs/17 §3–4 (2026-09-10) | — |
+| M41 Saved filters & dashboards | pending | specs/21 §1–2 (2026-09-10) | — |
+| M42 Scheduled reports & export | pending | specs/21 §3–4 (2026-09-10) | — |
+| M43 Import pipeline | pending | specs/21 §5 (2026-09-10) | — |
+| M44a Workflow model & enforcement | pending | specs/19 §1–3 (2026-09-10) | — |
+| M44b Workflow editor & consequences | pending | specs/19 §4–5 (2026-09-10) | — |
+| M45a Git connections & webhooks | pending | specs/18 §1–3 (2026-09-10) | — |
+| M45b Smart commits & transitions | pending | specs/18 §4–6 (2026-09-10) | — |
+| M46 CI status & deployments | pending | specs/18 §6–8 (2026-09-10) | — |
+| M47 Versions & release notes | pending | specs/24 §1–2 (2026-09-10) | — |
+| M48 Roadmap & capacity | pending | specs/24 §3–4 (2026-09-10) | — |
+| M49 Time tracking | pending | specs/24 §5 (2026-09-10) | — |
+| M50 Outbound webhooks | pending | specs/22 §1 (2026-09-10) | — |
+| M51 API tokens & service accounts | pending | specs/22 §2 (2026-09-10) | — |
+| M52 Automation rules | pending | specs/22 §3 (2026-09-10) | — |
+| M53 API versioning & rate limits | pending | specs/22 §4 (2026-09-10) | — |
+| M54 Organisations & visibility | pending | specs/23 §5–6 (2026-09-10) | — |
+| M55 Custom roles | pending | specs/23 §4 (2026-09-10) | — |
+| M56 SSO (OIDC & SAML) | pending | specs/23 §1 (2026-09-10) | — |
+| M57 SCIM & teams | pending | specs/23 §2–3 (2026-09-10) | — |
+| M58 Admin console & governance | pending | specs/23 §7–9 (2026-09-10) | — |
+| M59 Caching & query performance | pending | specs/25 §1–4 (2026-09-10) | — |
+| M60 Frontend perf, load & SLOs | pending | specs/25 §5–6 (2026-09-10) | — |
+| M61 Real-time sync & presence | pending | specs/26 §1–3 (2026-09-10) | — |
+| M62 Chat & inbound email | pending | specs/26 §4–5 (2026-09-10) | — |
+| M63 Reactions & threading | pending | specs/26 §6 (2026-09-10) | — |
+| M64 AI plumbing, triage & dupes | pending | specs/27 §1–2, §9 (2026-09-10) | — |
+| M65 Summarisation & standup digest | pending | specs/27 §3 (2026-09-10) | — |
+| M66 Rot detection & calibration | pending | specs/27 §4–6 (2026-09-10) | — |
+| M67 Personal queue & meeting mode | pending | specs/27 §7–8 (2026-09-10) | — |
+| M68 Accessibility & keyboard | pending | specs/28 §1–2 (2026-09-10) | — |
+| M69 Theming & i18n | pending | specs/28 §3–4 (2026-09-10) | — |
+| M70 Mobile, PWA & state polish | pending | specs/28 §5–7 (2026-09-10) | — |
 
 ## Handoff log
 <!-- One entry per module, written at completion time (Phase 4 step 4). -->
@@ -1837,3 +1889,4 @@ shipping configuration (`AUTH_DEV_IMPERSONATION=false`) on both the built image 
 4. Single-process rate limiting and session checks — a second instance shares neither.
 5. `AUTH_JWT_SECRET` is single-valued; rotation logs everyone out.
 6. SSO, out of scope by spec 10 §9.
+

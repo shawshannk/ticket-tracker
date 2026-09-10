@@ -23,12 +23,37 @@ This repo is a spec-first handoff: read `specs/00-architecture-and-data-model.md
 | CI | GitHub Actions | |
 | Local infra | Docker Compose | Postgres + API + web, one `docker compose up` |
 
-**Not decided yet (explicitly out of scope for this spec, flagged for later):**
-- Cloud hosting target (AWS/other) — you said decide later
-- ~~Real authentication~~ — **shipped in Phase 2** (`specs/10-authentication-and-authorization.md`). v1's "acting as" selector is gone. SSO is still out of scope (spec 10 §9)
-- File attachments on tickets
-- Email/notification delivery
-- Real-time sync (websockets) between multiple open browser tabs/users
+**Status of the original deferrals:**
+- Cloud hosting target (AWS/other) — still undecided
+- ~~Real authentication~~ — **shipped in Phase 2** (`specs/10-authentication-and-authorization.md`). v1's "acting as" selector is gone
+- ~~File attachments~~ — **specified for Phase 3**, `specs/16-attachments-and-rich-content.md` (M33)
+- ~~Email/notification delivery~~ — **specified for Phase 3**, `specs/13-jobs-and-email.md` (M26) and `specs/14-notifications-and-subscriptions.md` (M27–M28)
+- ~~Real-time sync between tabs/users~~ — **specified for Phase 3**, `specs/26-realtime-and-integrations.md` (M61); SSE rather than websockets, see that spec §1
+- ~~SSO~~ — **specified for Phase 3**, `specs/23-identity-and-governance.md` §1 (M56)
+
+### Phase 3 — production readiness and product depth (specs 11–28, modules M22–M70)
+
+Written 2026-09-10. Specs 11–13 are foundations every later module depends on; build them first.
+`docs/plan/PLAN.md` holds the module breakdown, sizes and dependency order.
+
+11. `specs/11-production-hardening.md` — logging, request correlation, the error contract, real health checks, shutdown, container hardening
+12. `specs/12-activity-history-and-trash.md` — the ticket event stream (the substrate for most of what follows) and soft delete
+13. `specs/13-jobs-and-email.md` — background job runner, transactional outbox, invites and password reset by email
+14. `specs/14-notifications-and-subscriptions.md` — watchers, mentions, in-app inbox, digests
+15. `specs/15-agile-planning.md` — sprint lifecycle, backlog ranking, points, velocity, burndown, board config
+16. `specs/16-attachments-and-rich-content.md` — S3 attachments and markdown editing
+17. `specs/17-search-and-query-language.md` — full-text, cross-project search, and TQL
+18. `specs/18-git-and-ci-integration.md` — repos, PRs, smart commits, CI status, deployment tracking
+19. `specs/19-configurable-workflows.md` — per-project statuses and transitions, replacing `STATUS_BY_TYPE`
+20. `specs/20-ticket-model-extensions.md` — sub-tasks, links, labels, templates, custom fields, bulk ops
+21. `specs/21-filters-reports-and-dashboards.md` — saved filters, dashboards, scheduled reports, export and import
+22. `specs/22-api-platform-and-automation.md` — outbound webhooks, API tokens, automation rules, API versioning
+23. `specs/23-identity-and-governance.md` — SSO, SCIM, teams, custom roles, orgs, admin console, GDPR
+24. `specs/24-releases-roadmap-and-capacity.md` — versions, release notes, roadmap, capacity, time tracking
+25. `specs/25-scale-and-performance.md` — caching, indexes, cursor pagination, load testing, metrics, SLOs
+26. `specs/26-realtime-and-integrations.md` — SSE live updates, presence, Slack/Teams, inbound email
+27. `specs/27-intelligence-and-insights.md` — AI triage, duplicates, standup digest, rot detection, personal queue
+28. `specs/28-ux-accessibility-and-mobile.md` — WCAG 2.2 AA, keyboard, theming, i18n, mobile/PWA, empty states
 
 ## Repo structure
 

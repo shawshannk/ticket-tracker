@@ -31,6 +31,24 @@ Where reference and spec disagreed, resolved with the user (see D-key, R10 below
 | **Authentication & authorization (v2)** | specs/10-authentication-and-authorization.md | 2026-09-09 |
 | **Auth technical design (v2)** | docs/auth-tech-spec.md | 2026-09-09 |
 | Testing & devops | specs/09-testing-and-devops.md | 2026-07-15 |
+| **Phase 3** — Production hardening | specs/11-production-hardening.md | 2026-09-10 |
+| **Phase 3** — Activity history & trash | specs/12-activity-history-and-trash.md | 2026-09-10 |
+| **Phase 3** — Jobs & email | specs/13-jobs-and-email.md | 2026-09-10 |
+| **Phase 3** — Notifications & subscriptions | specs/14-notifications-and-subscriptions.md | 2026-09-10 |
+| **Phase 3** — Agile planning | specs/15-agile-planning.md | 2026-09-10 |
+| **Phase 3** — Attachments & rich content | specs/16-attachments-and-rich-content.md | 2026-09-10 |
+| **Phase 3** — Search & query language | specs/17-search-and-query-language.md | 2026-09-10 |
+| **Phase 3** — Git, CI & deployments | specs/18-git-and-ci-integration.md | 2026-09-10 |
+| **Phase 3** — Configurable workflows | specs/19-configurable-workflows.md | 2026-09-10 |
+| **Phase 3** — Ticket model extensions | specs/20-ticket-model-extensions.md | 2026-09-10 |
+| **Phase 3** — Filters, reports & dashboards | specs/21-filters-reports-and-dashboards.md | 2026-09-10 |
+| **Phase 3** — API platform & automation | specs/22-api-platform-and-automation.md | 2026-09-10 |
+| **Phase 3** — Identity & governance | specs/23-identity-and-governance.md | 2026-09-10 |
+| **Phase 3** — Releases, roadmap & capacity | specs/24-releases-roadmap-and-capacity.md | 2026-09-10 |
+| **Phase 3** — Scale & performance | specs/25-scale-and-performance.md | 2026-09-10 |
+| **Phase 3** — Real-time & integrations | specs/26-realtime-and-integrations.md | 2026-09-10 |
+| **Phase 3** — Intelligence & insights | specs/27-intelligence-and-insights.md | 2026-09-10 |
+| **Phase 3** — UX, a11y, i18n & mobile | specs/28-ux-accessibility-and-mobile.md | 2026-09-10 |
 
 <!-- Fingerprint = last-modified date of the spec file at the time PLAN.md was
      (re-)derived from it. Update on every spec-level change. Phase 3 checks
@@ -158,3 +176,38 @@ Decided with the user during the spec-10 review; each was a genuine fork, not a 
 - **Acting-as**: kept behind `AUTH_DEV_IMPERSONATION`, refused at boot in production, rather
   than deleted outright (keeps e2e and local dev cheap) or kept as an admin impersonation
   feature (a privilege-escalation surface nobody asked for).
+
+## Phase 3 cross-module contracts (added 2026-09-10)
+The things specs 11–28 share. A change to any of these affects many modules at once.
+
+- **The error envelope** (owner: specs/11 §3, `packages/shared/src/errors.ts`): every non-2xx
+  response is `{ error: { code, message, requestId, details? } }`. The web app branches on
+  `code`, never on message text. New modules add to `ERROR_CODES`; they do not invent shapes.
+- **The ticket event stream** (owner: specs/12, `ticket_events`): the single source of truth for
+  "what happened". Notifications (14), charts (15 §5), webhooks (22 §1), automation triggers
+  (22 §3), real-time (26 §1), cache versioning (25 §1) and every insight (27) read it. A module
+  that introduces a new kind of change **extends `TICKET_EVENT_TYPES`** rather than adding a
+  parallel log, and always records inside the caller's transaction.
+- **The event formatter** (owner: specs/12 §3, `packages/shared`): one function renders an event
+  as human text, used by the timeline, email, digests, chat unfurls and the audit browser.
+- **TQL** (owner: specs/17 §3, `packages/shared/src/tql`): one parser and one compiler to
+  parameterised SQL. Saved filters, board configs, dashboard widgets, scheduled reports, webhook
+  filters and automation conditions all reference it. No module writes a second filter dialect.
+- **Status categories** (owner: specs/19 §1): once workflows are data, nothing keys off the
+  string "Done". Charts, counts and "is it finished" read `statusCategory`.
+- **Permission resolution** (owner: specs/10, extended by specs/23 §4): `can(role, action)` keeps
+  its signature; only the answer's source moves from constant to database. **Guards remain the
+  sole enforcement point** — automation (22 §3), API tokens (22 §2), smart commits (18 §4),
+  scheduled reports (21 §3) and shared filters (21 §1) all execute as a user and are bounded by
+  that user's live permissions. Nothing in Phase 3 introduces a privilege-escalation path.
+- **Job envelope** (owner: specs/13 §1): every job carries the originating `requestId`, is
+  idempotent, and is retried with backoff into a visible DLQ. Anything that must be atomic with a
+  transaction goes through the outbox, not a direct enqueue.
+- **List envelope & cursors** (owner: specs/25 §3): every list endpoint returns
+  `{ items, nextCursor, hasMore }`. `totalCount` is opt-in.
+- **The org boundary** (owner: specs/23 §5): every tenant-scoped table carries `organizationId`,
+  and `ProjectScopeGuard` checks org before project.
+- **Migration discipline**: three Phase 3 modules replace a compiled-in constant with data —
+  M44a (`STATUS_BY_TYPE`), M55 (the permission matrix), M36 (the label array). In each case the
+  pre-existing unit tests must pass **unchanged** against the seeded defaults. That is the
+  acceptance criterion that proves the migration preserved behaviour, and it is not negotiable.
