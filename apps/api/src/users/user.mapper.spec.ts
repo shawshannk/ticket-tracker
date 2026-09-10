@@ -1,6 +1,6 @@
 import type { users } from '../db/schema';
 import { describe, expect, it } from 'vitest';
-import { toUser } from './user.mapper';
+import { canSeeEmail, toUser, toUserFor, type EmailViewer } from './user.mapper';
 
 type UserRow = typeof users.$inferSelect;
 
@@ -43,5 +43,50 @@ describe('toUser', () => {
 
   it('converts createdAt to an ISO string', () => {
     expect(toUser(row).createdAt).toBe('2026-07-15T00:00:00.000Z');
+  });
+});
+
+/**
+ * Email visibility (docs/auth-tech-spec.md §4.4). The directory stays open — names and roles are
+ * how the app renders assignees — but an address list is the raw material for phishing everyone,
+ * so it narrows to platform admins and to yourself.
+ */
+describe('email visibility', () => {
+  const admin: EmailViewer = { id: 'admin-id', role: 'admin' };
+  const manager: EmailViewer = { id: 'manager-id', role: 'manager' };
+  const self: EmailViewer = { id: row.id, role: 'developer' };
+
+  it('shows every address to a platform admin', () => {
+    expect(canSeeEmail(admin, row.id)).toBe(true);
+    expect(toUserFor(admin, row).email).toBe('ada@nimbus.io');
+  });
+
+  it('shows people their own address whatever their role', () => {
+    expect(canSeeEmail(self, row.id)).toBe(true);
+    expect(toUserFor(self, row).email).toBe('ada@nimbus.io');
+  });
+
+  it('hides it from everyone else, including a manager', () => {
+    // A manager runs projects, not accounts — the platform role is what governs this, and
+    // `user.manage` is admin-only.
+    expect(canSeeEmail(manager, row.id)).toBe(false);
+    expect(toUserFor(manager, row).email).toBeNull();
+  });
+
+  it('hides it from an unidentified caller', () => {
+    expect(canSeeEmail(null, row.id)).toBe(false);
+    expect(toUserFor(null, row).email).toBeNull();
+  });
+
+  it('redacts rather than deletes, so the field is always present', () => {
+    // A UI that forgets to handle the null renders nothing; one that hit `undefined` on a missing
+    // key would be just as likely to render the string "undefined".
+    const dto = toUserFor(manager, row);
+    expect('email' in dto).toBe(true);
+    expect(Object.keys(dto).sort()).toEqual(Object.keys(toUser(row)).sort());
+  });
+
+  it('never smuggles password material through the redacting path either', () => {
+    expect(JSON.stringify(toUserFor(admin, row))).not.toContain('argon2');
   });
 });

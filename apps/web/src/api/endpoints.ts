@@ -4,6 +4,8 @@ import type {
   Comment,
   CommentCreateDto,
   InvitePreview,
+  MemberAddDto,
+  MemberUpdateDto,
   Membership,
   MoveTicketStatusDto,
   OverviewStats,
@@ -66,6 +68,12 @@ export const api = {
     sprints: (id: string) => apiFetch<Sprint[]>(`/projects/${id}/sprints`),
     create: (body: ProjectCreateDto) => apiFetch<Project>('/projects', { method: 'POST', body }),
     members: (id: string) => apiFetch<ProjectMemberSummary[]>(`/projects/${id}/members`),
+    addMember: (id: string, body: MemberAddDto) =>
+      apiFetch<void>(`/projects/${id}/members`, { method: 'POST', body }),
+    updateMember: (id: string, userId: string, body: MemberUpdateDto) =>
+      apiFetch<void>(`/projects/${id}/members/${userId}`, { method: 'PATCH', body }),
+    removeMember: (id: string, userId: string) =>
+      apiFetch<void>(`/projects/${id}/members/${userId}`, { method: 'DELETE' }),
   },
 
   tickets: {

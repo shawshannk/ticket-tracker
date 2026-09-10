@@ -25,7 +25,7 @@ This repo is a spec-first handoff: read `specs/00-architecture-and-data-model.md
 
 **Not decided yet (explicitly out of scope for this spec, flagged for later):**
 - Cloud hosting target (AWS/other) — you said decide later
-- Real authentication (JWT/SSO) — v1 uses an "acting as" user selector instead; see `specs/08-current-user-and-permissions.md` for exactly what that does and does not protect against
+- ~~Real authentication~~ — **shipped in Phase 2** (`specs/10-authentication-and-authorization.md`). v1's "acting as" selector is gone. SSO is still out of scope (spec 10 §9)
 - File attachments on tickets
 - Email/notification delivery
 - Real-time sync (websockets) between multiple open browser tabs/users
@@ -75,16 +75,31 @@ DevPassw0rd!2026
 ```
 
 e.g. `jordan.lee@nimbus.io` (admin), `priya.nair@nimbus.io` (manager),
-`marcus.chen@nimbus.io` (developer).
+`marcus.chen@nimbus.io` (developer). Sign in at `/login`; there is no other way in.
 
 This is development-only by construction: the seed refuses to run against a non-local database
 unless `SEED_ALLOW_REMOTE=true` is set explicitly, because it writes a known password onto every
 account. Re-running the seed is idempotent and re-asserts those credentials without touching
 names, departments or roles.
 
+### Authentication in development
+
+`AUTH_DEV_IMPERSONATION` is **off** in Compose and CI, which is the configuration that ships:
+every route needs a bearer token and the legacy `X-Acting-User-Id` header does nothing. Turning
+it on locally restores v1's behaviour — any request may claim to be any user — which is useful
+for poking the API by hand and is refused outright when `NODE_ENV=production`.
+
+`AUTH_JWT_SECRET` is required to boot; `apps/api/.env.example` documents it and the rest.
+Rotating it signs everyone out. See `docs/auth-tech-spec.md` §8 for the full table.
+
+The built web image sends a strict `Content-Security-Policy` (`apps/web/nginx.conf`) — spec 10
+§8 names it as the mitigation for what XSS could otherwise do with the in-memory access token,
+so it is part of the deliverable. The Vite dev server does not send it; `pnpm exec playwright
+test` against the built image is what checks it.
+
 ## Known gaps carried over from the prototype (things it faked)
 
-- The prototype's "switch user" dropdown is not authentication — it's a demo convenience. v1 kept that *pattern* deliberately (see spec 08). **Being replaced now**: `specs/10-authentication-and-authorization.md` specifies real auth, and `docs/plan/PLAN.md` M15–M21 build it. Until M21 lands, the acting-as header is still how the app identifies you.
+- The prototype's "switch user" dropdown was not authentication — it was a demo convenience, and v1 kept that *pattern* deliberately (see spec 08). **Replaced in Phase 2** (M15–M21): you sign in with a password, every route requires a verified token, and `X-Acting-User-Id` is inert. The account menu shows who you are; there is no list to pick from.
 - The prototype's project switcher didn't actually filter data — this spec fixes that (see spec 02).
 - Comments were hardcoded to author "Jordan Lee" regardless of which demo user was active — this spec fixes that (see spec 05).
 - All prototype state lived in React memory and reset on refresh — this spec persists everything to Postgres.

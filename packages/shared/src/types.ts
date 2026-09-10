@@ -43,7 +43,12 @@ export interface Project {
 export interface User {
   id: string;
   name: string;
-  email: string;
+  /**
+   * Null when the viewer may not see it: a platform admin sees every address, everyone else sees
+   * only their own (docs/auth-tech-spec.md §4.4). The field is always present, so a UI that
+   * forgets to handle null renders nothing rather than someone else's address.
+   */
+  email: string | null;
   department: Department;
   role: UserRole;
   /**

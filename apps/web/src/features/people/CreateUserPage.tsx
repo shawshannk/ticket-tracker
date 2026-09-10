@@ -24,7 +24,7 @@ export function CreateUserPage() {
     return (
       <div className="max-w-[520px] px-8 pt-[30px]">
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
-          Only an Admin can add team members. Switch the acting user in the sidebar.
+          Only an Admin can add team members. Ask one to invite this person.
         </p>
       </div>
     );

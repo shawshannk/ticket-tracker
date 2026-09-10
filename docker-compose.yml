@@ -34,15 +34,21 @@ services:
       dockerfile: apps/api/Dockerfile
     environment:
       DATABASE_URL: postgres://ticket_tracker:dev_only_password@postgres:5432/ticket_tracker
-      WEB_ORIGIN: http://localhost:5173
+      # Both spellings of the same dev host. CORS matches on the *origin string*, and the browser
+      # sends whichever one the address bar used — a stray `pnpm run dev` can hold `localhost:5173`
+      # (it binds ::1, which resolves first), leaving `127.0.0.1:5173` as the way to reach this
+      # container. Naming only one made every request from the other fail CORS with no clue why.
+      WEB_ORIGIN: http://localhost:5173,http://127.0.0.1:5173
       PORT: 3000
       # Required since M16 — the API refuses to boot without it. A fixed value is fine here
       # precisely because this file is development-only; a real deployment must supply its own,
       # and changing it signs everyone out.
       AUTH_JWT_SECRET: compose_dev_only_secret_at_least_32_bytes_long_xxxxx
-      # v1's X-Acting-User-Id still works here, which is what keeps the web app usable until
-      # M20 ships a login screen. Refused at boot if NODE_ENV=production.
-      AUTH_DEV_IMPERSONATION: "true"
+      # **Off since M21 — the cutover.** v1's X-Acting-User-Id is inert and every route needs a
+      # verified token (R11). The AuthGuard branch still exists and can be switched back on for
+      # local debugging, but this is the supported configuration and what CI now runs. The API
+      # refuses to boot with it enabled under NODE_ENV=production regardless.
+      AUTH_DEV_IMPERSONATION: "false"
       # The spec's limit is 10 logins per 15 minutes per ip+email. The e2e suite signs in for
       # real several times per run from one host, so two runs inside the window would trip it and
       # look like a broken login page. Development only — nothing outside Compose sets these, and

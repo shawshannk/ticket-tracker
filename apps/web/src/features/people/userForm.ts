@@ -11,7 +11,10 @@ export const emptyUserForm = (): UserForm => ({ name: '', email: '', department:
 
 export const formFromUser = (user: User): UserForm => ({
   name: user.name,
-  email: user.email,
+  // Null when the viewer may not see it (tech spec §4.4). Only an admin can reach the edit form
+  // and an admin always sees addresses, so in practice this coalesce never fires — but a blank
+  // field is the right failure if it ever did, not the string "null" written back over an email.
+  email: user.email ?? '',
   department: user.department,
   role: user.role,
 });

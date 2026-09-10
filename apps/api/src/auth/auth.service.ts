@@ -140,7 +140,9 @@ export class AuthService {
       throw new UnauthorizedException('Current password is incorrect');
     }
 
-    this.passwords.assertAcceptable(newPassword, { email: user.email, name: user.name });
+    // From the freshly-loaded row, not the DTO: the DTO's email is nullable now that it can be
+    // redacted for a viewer, and the policy check wants the stored address regardless.
+    this.passwords.assertAcceptable(newPassword, { email: row.email, name: row.name });
 
     await this.db
       .update(users)

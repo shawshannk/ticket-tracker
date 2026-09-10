@@ -23,16 +23,21 @@ export class UsersController {
     private readonly commandBus: CommandBus,
   ) {}
 
+  /**
+   * The directory. Names, roles and departments are open — the app renders assignees and comment
+   * authors from them — but **emails come back only to a platform admin, and to yourself**
+   * (tech spec §4.4). The viewer is passed down to the mapper rather than filtered here.
+   */
   @Get()
   @ApiOperation({ summary: 'List all users' })
-  list(): Promise<User[]> {
-    return this.queryBus.execute(new GetUsersQuery());
+  list(@Auth() auth: AuthContext | null): Promise<User[]> {
+    return this.queryBus.execute(new GetUsersQuery(auth?.user ?? null));
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get one user' })
-  get(@Param('id', ParseUUIDPipe) id: string): Promise<User> {
-    return this.queryBus.execute(new GetUserQuery(id));
+  get(@Param('id', ParseUUIDPipe) id: string, @Auth() auth: AuthContext | null): Promise<User> {
+    return this.queryBus.execute(new GetUserQuery(id, auth?.user ?? null));
   }
 
   /**

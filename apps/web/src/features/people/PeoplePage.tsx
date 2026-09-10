@@ -54,7 +54,10 @@ export function PeoplePage() {
             </span>
             <div className="min-w-0">
               <div className="truncate text-[13.5px] font-medium text-slate-800">{user.name}</div>
-              <div className="truncate text-[11.5px] text-slate-400">{user.email}</div>
+              <div className="truncate text-[11.5px] text-slate-400">
+                {/* Null unless the viewer is a platform admin, or it is their own row. */}
+                {user.email ?? user.department}
+              </div>
             </div>
             <div className="truncate text-[12.5px] text-slate-600">{user.department}</div>
             <div>

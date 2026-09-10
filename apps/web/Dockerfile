@@ -20,9 +20,14 @@ RUN pnpm --filter @ticket-tracker/shared run build \
  && pnpm --filter @ticket-tracker/web run build
 
 FROM nginx:1.27-alpine AS runtime
+ARG VITE_API_URL=http://localhost:3000
 COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
-# The app is a SPA on TanStack Router: any deep link must serve index.html, or a refresh on
-# /projects/<id>/board would 404.
-RUN printf 'server {\n  listen 5173;\n  root /usr/share/nginx/html;\n  location / {\n    try_files $uri $uri/ /index.html;\n  }\n}\n' > /etc/nginx/conf.d/default.conf \
- && rm -f /etc/nginx/conf.d/default.conf.default
+# The config moved out of a `printf` here and into apps/web/nginx.conf once it grew a CSP —
+# a security header is not something to maintain inside an escaped shell string.
+COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+# The CSP's connect-src is pinned to the same origin the bundle was built to call, so the two
+# cannot drift. Done with sed at build time, not nginx's envsubst templates: envsubst would also
+# expand `$uri` in try_files and break SPA routing.
+RUN sed -i "s|__API_ORIGIN__|${VITE_API_URL}|g" /etc/nginx/conf.d/default.conf \
+ && nginx -t
 EXPOSE 5173

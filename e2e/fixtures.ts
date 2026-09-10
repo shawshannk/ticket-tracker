@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test';
+import type { UserRole } from '@ticket-tracker/shared';
 
 export const API = process.env.E2E_API_URL ?? 'http://localhost:3000';
 
@@ -87,6 +88,7 @@ export async function useProject(keyPrefix: string): Promise<Seed> {
   if (!project) throw new Error(`Seeded project ${keyPrefix} not found — run pnpm --filter @ticket-tracker/api run db:seed`);
 
   const people = await users();
+  await ensureMembership(project.id);
   await clearTickets(project.id);
 
   const epic = await json<{ id: string }>(
@@ -94,6 +96,38 @@ export async function useProject(keyPrefix: string): Promise<Seed> {
     post({ type: 'epic', title: 'E2E parent epic' }),
   );
   return { projectId: project.id, epicId: epic.id, ...people };
+}
+
+/**
+ * Put the three test people back in the project with their global role as their project role,
+ * exactly as `db:seed` leaves things.
+ *
+ * Several specs deliberately remove someone to test scoping and restore them in `finally`. That
+ * is not enough: a run killed mid-test, or a failure in the restore itself, leaves the seed
+ * altered — and the symptom is some *other* spec failing later for a reason that has nothing to
+ * do with it. Repairing here makes every run start from the same place regardless of how the
+ * last one ended.
+ */
+async function ensureMembership(projectId: string) {
+  const directory = await json<{ id: string; email: string; role: UserRole }[]>('/users');
+  const members = await json<{ userId: string; role: string }[]>(`/projects/${projectId}/members`);
+  const byId = new Map(members.map((m) => [m.userId, m.role]));
+
+  for (const person of Object.keys(PEOPLE) as Person[]) {
+    const row = directory.find((u) => u.email === PEOPLE[person].email);
+    if (!row) continue;
+
+    const current = byId.get(row.id);
+    if (current === undefined) {
+      await json<void>(`/projects/${projectId}/members`, post({ userId: row.id, role: row.role }));
+    } else if (current !== row.role) {
+      await json<void>(`/projects/${projectId}/members/${row.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ role: row.role }),
+      });
+    }
+  }
 }
 
 /** Leaves the project itself in place; only the rows a spec created are removed. */
@@ -144,6 +178,40 @@ export async function signIn(page: Page, person: Person) {
   // Not `nav` — a person with no project memberships lands on an empty state that has no
   // sidebar at all, and this helper has to work for them too.
   await expect(page.locator('#email')).toHaveCount(0);
+}
+
+/** Log out through the account menu, the way a person does. */
+export async function signOut(page: Page, everywhere = false) {
+  await page.locator('nav button[aria-haspopup="menu"]').click();
+  const label = everywhere ? 'Log out everywhere' : 'Log out';
+  await page.locator('nav [role="menu"] button').filter({ hasText: new RegExp(`^${label}$`) }).click();
+  await page.waitForURL(/\/login/);
+}
+
+/** Creates a user through the API and returns the raw invite link, shown exactly once. */
+export async function inviteUser(
+  name: string,
+  /** Grant membership too, so accepting lands them in a project rather than an empty state. */
+  projectId?: string,
+): Promise<{ userId: string; email: string; inviteUrl: string }> {
+  const email = `invitee-${Date.now()}-${Math.floor(Math.random() * 1000)}@nimbus.io`;
+  const created = await json<{ user: { id: string }; inviteUrl: string }>(
+    '/users',
+    post({ name, email, department: 'Engineering', role: 'developer' }),
+  );
+  if (projectId) {
+    await json<void>(`/projects/${projectId}/members`, post({ userId: created.user.id, role: 'developer' }));
+  }
+  return { userId: created.user.id, email, inviteUrl: created.inviteUrl };
+}
+
+export async function deleteUserRows(userId: string) {
+  // No DELETE /users endpoint (spec 07 never needed one); disabling is how an account is retired.
+  await json<void>(`/users/${userId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ status: 'disabled' }),
+  });
 }
 
 export const boardColumns = (page: Page) => page.locator('main div.rounded-xl.p-3');

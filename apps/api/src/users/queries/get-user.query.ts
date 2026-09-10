@@ -5,21 +5,24 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '../../db';
 import { DB } from '../../db/db.module';
 import { users } from '../../db/schema';
-import { toUser } from '../user.mapper';
+import { toUserFor, type EmailViewer } from '../user.mapper';
 
 export class GetUserQuery {
-  constructor(readonly id: string) {}
+  constructor(
+    readonly id: string,
+    readonly viewer: EmailViewer | null,
+  ) {}
 }
 
 @QueryHandler(GetUserQuery)
 export class GetUserHandler implements IQueryHandler<GetUserQuery, User> {
   constructor(@Inject(DB) private readonly db: Db) {}
 
-  async execute({ id }: GetUserQuery): Promise<User> {
+  async execute({ id, viewer }: GetUserQuery): Promise<User> {
     const [row] = await this.db.select().from(users).where(eq(users.id, id)).limit(1);
     if (!row) {
       throw new NotFoundException(`User ${id} not found`);
     }
-    return toUser(row);
+    return toUserFor(viewer, row);
   }
 }

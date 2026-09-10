@@ -33,7 +33,7 @@ Phase 2 (M15–M21) derived from `specs/10-authentication-and-authorization.md` 
 | M18 Project membership & scope guard | done | specs/10 §3.2, tech-spec §5 (2026-09-09) | 2026-09-10 |
 | M19 Record-level ownership | done | specs/10 §3.3, tech-spec §5.2 (2026-09-09) | 2026-09-10 |
 | M20 Web auth flow | done | specs/10 §6, tech-spec §7 (2026-09-09) | 2026-09-10 |
-| M21 Members UI, invites & cutover | **not started** | specs/10 §4.5, tech-spec §9 (2026-09-09) | — |
+| M21 Members UI, invites & cutover | done | specs/10 §4.5, tech-spec §9 (2026-09-09) | 2026-09-10 |
 
 ## Handoff log
 <!-- One entry per module, written at completion time (Phase 4 step 4). -->
@@ -1693,3 +1693,147 @@ other client: `AUTH_DEV_IMPERSONATION` is still on in Compose, but nothing in `a
     neither, and `Comment.authorId` is there to compare against `useAuth().user.id`.
 
 - **Next**: M21 — members UI, invites, hardening & cutover. No blockers.
+
+### M21 — Members UI, invites, hardening & cutover (done, 2026-09-10)
+
+The cutover. `AUTH_DEV_IMPERSONATION` is off in Compose and CI, the built image serves a CSP, and
+the e2e suite exercises the shipping configuration. **Phase 2 is complete.**
+
+- **Files created**: `apps/web/src/features/project-settings/MembersPage.tsx`,
+  `apps/web/nginx.conf`.
+- **Files modified**: `apps/api/src/users/user.mapper.ts` + `.spec.ts`,
+  `apps/api/src/users/queries/{get-user,get-users}.query.ts`, `apps/api/src/users/users.controller.ts`,
+  `apps/api/src/auth/auth.service.ts`; `packages/shared/src/types.ts`;
+  `apps/web/src/api/{endpoints,queries}.ts`, `apps/web/src/{router.tsx,layout/Sidebar.tsx}`,
+  `apps/web/src/features/people/{UserDetailPage,PeoplePage,CreateUserPage,userForm}`,
+  `apps/web/src/auth/ChangePasswordPage.tsx`, `apps/web/Dockerfile`;
+  `e2e/{fixtures,auth.spec}.ts`, `playwright.config.ts`; `docker-compose.yml`,
+  `.github/workflows/ci.yml`, `apps/api/.env.example`, `README.md`.
+
+- **The decision that shaped the module — `User.email` became nullable.** Tech spec §4.4 says the
+  directory returns emails only to platform admins. Redaction lives in the mapper (`toUserFor`),
+  not in each query, for the same reason `toUser` is written field by field: put the rule where
+  every DTO is built, or the next endpoint returning a user quietly reintroduces the leak. The
+  field is *redacted, not deleted*, so a UI that forgets the null renders nothing rather than
+  hitting `undefined` on a missing key. The type change made the compiler list the four call
+  sites that had to decide what to do.
+
+- **Decisions and deviations**:
+  1. **`style-src` allows `'unsafe-inline'`; `script-src` does not.** The app sets inline `style`
+     attributes for role colours, and `index.css` imports IBM Plex from Google Fonts — so
+     `fonts.googleapis.com` and `fonts.gstatic.com` are named too. Inline styles cannot execute
+     code; inline scripts can, and that is the directive spec 10 §8 is actually about. Recorded
+     in `nginx.conf` as a trade-off rather than widened silently; self-hosting the faces would be
+     stricter and is a build change, not a config one.
+  2. **The nginx config moved out of the Dockerfile's `printf`** into `apps/web/nginx.conf`.
+     A security header is not something to maintain inside an escaped shell string. The CSP's
+     `connect-src` is `sed`-substituted at build time from the same `VITE_API_URL` the bundle was
+     compiled against — **not** nginx's envsubst templates, which would also expand `$uri` in
+     `try_files` and break SPA routing.
+  3. **Disable/enable is offered for everyone except yourself.** Disabling yourself ends your own
+     session on the next request (R15) and, as the last admin, would orphan the platform (R18).
+     The API refuses the second; not offering the first is kinder than explaining it afterwards.
+  4. **`WEB_ORIGIN` now names both `localhost:5173` and `127.0.0.1:5173`.** CORS matches the
+     origin *string*, and which one a browser sends depends on how the app was reached — see the
+     gotcha below.
+  5. **CI's e2e job raises `AUTH_LOGIN_RATE_LIMIT`.** The suite signs in for real several times
+     per run, and CI retries once, against a limit tuned for humans. `auth.int-spec.ts` is what
+     proves the limiter works, at the real limit.
+  6. **The last remaining acting-as copy was fixed** — CreateUserPage still told people to
+     "switch the acting user in the sidebar".
+
+- **A latent test-isolation bug, found and fixed.** Several specs remove someone from a project
+  to test scoping and restore them in `finally`. That is not enough: a run killed mid-test leaves
+  the seed altered, and the symptom is a *different* spec failing later for an unrelated-looking
+  reason — R3 started failing because a previous crashed run had left the developer a non-member
+  of Vega. `useProject()` now repairs membership to the seeded state on every run, so a run
+  cannot inherit the wreckage of the last one.
+
+- **Verification**:
+  | Check | Result |
+  |---|---|
+  | API unit | 157 passed (was 151; +6 email visibility) |
+  | API integration | 152 passed |
+  | Web unit | 62 passed |
+  | typecheck / build | clean; 5 pre-existing web lint warnings, 0 errors |
+  | **e2e against the built image, `AUTH_DEV_IMPERSONATION=false`, 4 runs** | **15/15 every run** |
+  | e2e against the Vite dev server (CI's local target) | 15/15 |
+  | `refresh_reuse` events across those runs | **0** (9 `refresh_replay_forgiven` — M20's grace window doing its job) |
+  | Anonymous `GET /users` with the flag off | 401 |
+  | Legacy `X-Acting-User-Id` with the flag off | 401 — inert (R11) |
+  | Emails returned to an admin / to a developer | 8 of 8 / 1 of 8 (their own) |
+  | CSP header served by the image | `script-src 'self'`, no `unsafe-inline`, `connect-src` pinned to the API origin |
+  | App runs with zero CSP violations | asserted in e2e on console output |
+  | Deep link (`/projects/x/board`) still served by nginx | 200 |
+  | Invite: admin creates → link shown once → second browser accepts → lands signed in → link spent | e2e |
+  | Logout → `/login`, back button does not restore the app | e2e |
+  | Non-member opening a project URL | "not found", indistinguishable from a missing id (R12) |
+  | Members table: add, re-role, remove; last admin's Remove disabled | e2e (R18) |
+
+- **Gotchas for whoever picks this up next**:
+  - **`localhost` may not be the container.** A stray `pnpm run dev` binds `[::1]:5173`, which
+    resolves first, so Compose rebuilds appear to do nothing. Testing the container via
+    `127.0.0.1:5173` instead is *not* equivalent — the refresh cookie is `SameSite=Lax` on
+    `localhost:3000`, and `127.0.0.1` is a different site, so it is never sent and every page
+    looks signed out. `E2E_FORCE_IPV4=1` maps `localhost` to IPv4 inside Chromium, which is the
+    way to test the image while a dev server is up.
+  - **The web container has no volume mount.** `docker compose build web` after any `apps/web`
+    change, or you are testing the previous bundle.
+  - **`AUTH_DEV_IMPERSONATION=true` is still supported** and still refused under
+    `NODE_ENV=production`. It exists for poking the API by hand; nothing in the app needs it.
+  - **Comment edit/delete still have no UI.** The API landed in M19; `Comment.authorId` is there
+    to compare against `useAuth().user.id`. This is the largest piece of shipped API with no
+    frontend.
+  - **An edited comment leaves no trace** — no `edited_at` column. Flagged in M19 and still open.
+  - **`GET /auth/me` returns `{user, memberships}`, not the tech spec's `permissions`.** `useCan`
+    computes from the shared matrices, so nothing needs it.
+  - **Retention is unimplemented.** `refresh_tokens`, `invites` and `auth_events` grow without
+    bound; `InviteService.purgeExpired` exists and nothing calls it (tech spec §10).
+  - **Rate limiting and session checks are single-process.** A second API instance would share
+    neither (tech spec §6.6).
+
+- **Next**: nothing. Phase 2 is complete — see the completion record below.
+
+## Phase 2 completion record (2026-09-10)
+
+Real authentication and authorization, specified in `specs/10-authentication-and-authorization.md`
+and `docs/auth-tech-spec.md`, built across M15–M21.
+
+**What shipped**: password login with argon2id, rotating refresh tokens with reuse detection,
+invite-based account activation, per-project membership and roles, record-level ownership, a real
+login/session UI, and a strict CSP — with `X-Acting-User-Id` removed from the product.
+
+| Requirement | Where it is enforced | Where it is proven |
+|---|---|---|
+| R11 proven identity | `auth.guard.ts` | `auth.int-spec.ts`; anonymous and legacy-header requests both 401 with the flag off |
+| R12 project scoping | `project-scope.guard.ts`, `get-projects.query.ts` | `project-scope.int-spec.ts`; 404 on seven routes incl. `GET /tickets/:id`, plus e2e |
+| R13 effective role | `permission.guard.ts`, `permissions.ts` | `permissions.spec.ts` truth table; both directions in `project-scope.int-spec.ts` |
+| R14 ownership | `auth/ownership.ts`, called from the handlers | `ownership.spec.ts` (24), `ownership.int-spec.ts` (22) |
+| R15 credential invalidation | `auth.guard.ts` re-reads per request | `auth.int-spec.ts`, `session.int-spec.ts` |
+| R16 rotation + reuse detection | `session.service.ts` | `session.int-spec.ts` — **narrowed by a 10s replay grace window in M20**, see below |
+| R17 no password material | `user.mapper.ts` projections | `user.mapper.spec.ts` |
+| R18 last admin standing | `update-user.command.ts`, `project-admins.ts` | `project-scope.int-spec.ts`, e2e members table |
+| R19 audited authority | `audit.service.ts` | asserted per event type across the auth int-specs |
+
+**Deviations from the spec, all recorded in place**:
+1. **R16 narrowed** (M20, agreed with the user): a refresh replay within `AUTH_REFRESH_GRACE_MS`
+   on a family that still holds a live token is forgiven and audited rather than revoking
+   everything. Every full page load rotates the cookie, so a navigation that discarded the
+   response otherwise ended every session the person had. Recorded under R16 in `specs/10`.
+2. **`tickets.reporter_id` added** (M15): the tech spec's ownership rules assume it and v1 stored
+   only a display name. M19 reads that column and never the name.
+3. **`GET /auth/invite/:token` added** (M20): spec 10 §6 wants the acceptance page to name the
+   invitee and nothing could tell it.
+4. **`User.email` nullable** (M21): the consequence of §4.4's viewer-dependent visibility.
+5. **`GET /auth/me` omits `permissions`**: `useCan` computes from the shared matrices instead.
+
+**Totals**: API 157 unit + 152 integration, web 62 unit, 15 e2e — all passing against the
+shipping configuration (`AUTH_DEV_IMPERSONATION=false`) on both the built image and the dev server.
+
+**Known open items**, in rough priority order:
+1. Comment edit/delete have no UI (API shipped in M19).
+2. An edited comment leaves no trace — no `edited_at`.
+3. No retention job; `refresh_tokens`, `invites` and `auth_events` grow without bound.
+4. Single-process rate limiting and session checks — a second instance shares neither.
+5. `AUTH_JWT_SECRET` is single-valued; rotation logs everyone out.
+6. SSO, out of scope by spec 10 §9.

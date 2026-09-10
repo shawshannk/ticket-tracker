@@ -12,6 +12,7 @@ import { CreateTicketPage } from './features/create-ticket/CreateTicketPage';
 import { CreateUserPage } from './features/people/CreateUserPage';
 import { PeoplePage } from './features/people/PeoplePage';
 import { UserDetailPage } from './features/people/UserDetailPage';
+import { MembersPage } from './features/project-settings/MembersPage';
 import { OverviewPage } from './features/overview/OverviewPage';
 import { TicketDetailPage } from './features/ticket-detail/TicketDetailPage';
 import { validateTicketSearch } from './features/tickets-list/searchParams';
@@ -193,6 +194,17 @@ const userDetailRoute = createRoute({
   ),
 });
 
+/** Project settings (spec 10 §6). Visible to any member; editable by managers and admins. */
+const membersRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: 'settings/members',
+  component: () => (
+    <AppShell title="Project members">
+      <MembersPage />
+    </AppShell>
+  ),
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   inviteRoute,
@@ -209,6 +221,7 @@ const routeTree = rootRoute.addChildren([
       peopleRoute,
       createUserRoute,
       userDetailRoute,
+      membersRoute,
     ]),
   ]),
 ]);

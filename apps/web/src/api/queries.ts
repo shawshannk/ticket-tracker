@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import type {
   BoardQuery,
   CommentCreateDto,
+  MemberAddDto,
+  MemberUpdateDto,
   UserCreateDto,
   UserUpdateDto,
   MoveTicketStatusDto,
@@ -27,6 +29,7 @@ export const queryKeys = {
   board: (projectId: string, query: BoardQuery) => ['projects', projectId, 'board', query] as const,
   overview: (projectId: string) => ['projects', projectId, 'overview'] as const,
   ticket: (id: string) => ['tickets', id] as const,
+  members: (projectId: string) => ['projects', projectId, 'members'] as const,
 };
 
 /** Everything scoped to a project, so a mutation can refresh all of its views at once. */
@@ -133,3 +136,38 @@ export function useAddComment(ticketId: string, projectId?: string) {
     },
   });
 }
+
+// --- Project membership (spec 10 §4.5) ---
+
+export const useMembers = (projectId: string) =>
+  useQuery({
+    queryKey: queryKeys.members(projectId),
+    queryFn: () => api.projects.members(projectId),
+    enabled: Boolean(projectId),
+  });
+
+/**
+ * The three membership writes share one invalidation: the member list, and `projects` — because
+ * removing yourself from a project removes it from your own switcher.
+ */
+function useMemberMutation<V>(projectId: string, mutationFn: (vars: V) => Promise<void>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.members(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.projects });
+    },
+  });
+}
+
+export const useAddMember = (projectId: string) =>
+  useMemberMutation(projectId, (body: MemberAddDto) => api.projects.addMember(projectId, body));
+
+export const useUpdateMember = (projectId: string) =>
+  useMemberMutation(projectId, ({ userId, body }: { userId: string; body: MemberUpdateDto }) =>
+    api.projects.updateMember(projectId, userId, body),
+  );
+
+export const useRemoveMember = (projectId: string) =>
+  useMemberMutation(projectId, (userId: string) => api.projects.removeMember(projectId, userId));

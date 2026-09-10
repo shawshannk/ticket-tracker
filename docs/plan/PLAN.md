@@ -319,6 +319,16 @@ first that may ship with the flag off.
   - E2E logs in for real (no impersonation) and covers: developer sees no Epic option and no Delete on someone else's ticket; a non-member navigating to a project URL sees "not found"; logout returns to `/login` and the back button does not restore the app.
   - CSP is served and the app runs with no inline-script violations.
   - CI passes with `AUTH_DEV_IMPERSONATION` unset for the auth e2e job.
+- **Scope adjusted 2026-09-10 during implementation**:
+  - `User.email` became nullable, the consequence of §4.4's viewer-dependent visibility; redaction
+    lives in `toUserFor` so every DTO path shares one rule.
+  - The nginx config moved into `apps/web/nginx.conf` and the CSP's `connect-src` is substituted
+    at build time with `sed` — nginx's envsubst templates would also expand `$uri` and break SPA
+    routing. `style-src` allows inline (role colours, Google Fonts); `script-src` does not.
+  - `WEB_ORIGIN` names both `localhost` and `127.0.0.1`; `playwright.config.ts` gained
+    `E2E_FORCE_IPV4` so the built image can be tested while a dev server holds `[::1]:5173`.
+  - `useProject()` now repairs project membership to the seeded state, so a crashed run cannot
+    poison the next one.
 - **Depends on**: M20
 
 ## Backlog

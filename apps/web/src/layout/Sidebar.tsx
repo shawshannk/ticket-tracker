@@ -17,6 +17,7 @@ const NAV = [
   { to: '/projects/$projectId/tickets', label: 'Tickets', icon: icon(<><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></>) },
   { to: '/projects/$projectId/board', label: 'Board', icon: icon(<><rect x="3" y="3" width="6" height="18" /><rect x="10" y="3" width="6" height="12" /><rect x="17" y="3" width="4" height="8" /></>) },
   { to: '/projects/$projectId/people', label: 'People', icon: icon(<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></>) },
+  { to: '/projects/$projectId/settings/members', label: 'Members', icon: icon(<><circle cx="9" cy="7" r="4" /><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>) },
 ] as const;
 
 export function Sidebar() {

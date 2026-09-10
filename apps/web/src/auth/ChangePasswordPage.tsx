@@ -17,7 +17,7 @@ export function ChangePasswordPage() {
   const [done, setDone] = useState(false);
   const [pending, setPending] = useState(false);
 
-  const issues = checkPassword(next, { email: user?.email });
+  const issues = checkPassword(next, { email: user?.email ?? undefined });
   const mismatch = confirm.length > 0 && confirm !== next;
   const ready = current.length > 0 && next.length > 0 && issues.length === 0 && confirm === next;
 

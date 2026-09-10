@@ -13,7 +13,9 @@ env:
   AUTH_JWT_SECRET: ci_only_secret_at_least_32_bytes_long_padding_xxxxx
   # The auth suite switches this off for itself; the e2e suite still needs it on until M20
   # gives the web app a login screen.
-  AUTH_DEV_IMPERSONATION: "true"
+  # Off since M21: CI runs the same configuration as a real deployment, so a regression that
+  # only shows up without the legacy header fails here rather than in production.
+  AUTH_DEV_IMPERSONATION: "false"
 
 jobs:
   # Fast feedback: everything that doesn't need a database.
@@ -70,6 +72,11 @@ jobs:
   e2e:
     name: Playwright end-to-end
     runs-on: ubuntu-latest
+    env:
+      # The suite signs in for real several times per run (M20), and a retried run doubles that
+      # against a limit tuned for humans — 10 per 15 minutes per ip+email, all from one runner.
+      # This job is not what proves the limiter works; `auth.int-spec.ts` is, at the real limit.
+      AUTH_LOGIN_RATE_LIMIT: '200'
     services:
       postgres:
         image: postgres:16
