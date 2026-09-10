@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { UnauthorizedException } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db';
 import { authEvents, refreshTokens, users } from '../db/schema';
@@ -83,10 +83,22 @@ describe('SessionService (integration)', () => {
     expect(await sessions.isFamilyActive(current.familyId)).toBe(true);
   });
 
+  /** Ages a token's `used_at` past the replay grace window, so a replay reads as theft. */
+  const ageBeyondGrace = (familyId: string) =>
+    db
+      .update(refreshTokens)
+      .set({ usedAt: new Date(Date.now() - 60_000) })
+      .where(and(eq(refreshTokens.familyId, familyId), isNotNull(refreshTokens.usedAt)));
+
   // R16, the heart of it.
   it('treats a replayed token as theft: revokes the whole family and audits it', async () => {
     const first = await sessions.issue(userId);
     const second = await sessions.rotate(first.refreshToken);
+
+    // Aged deliberately: a replay *within* seconds of the victim's own use is the benign
+    // lost-Set-Cookie case and is forgiven (see the test below). Theft is a token kept and
+    // replayed later, which is what this asserts.
+    await ageBeyondGrace(first.familyId);
 
     // The attacker replays the token they stole before the victim rotated it.
     await expect(sessions.rotate(first.refreshToken)).rejects.toBeInstanceOf(UnauthorizedException);
@@ -104,6 +116,56 @@ describe('SessionService (integration)', () => {
       .where(and(eq(authEvents.subjectId, userId), eq(authEvents.type, 'refresh_reuse')));
     expect(events.length).toBeGreaterThanOrEqual(1);
     expect(events.at(-1)!.metadata).toMatchObject({ familyId: first.familyId });
+  });
+
+  /**
+   * The grace window (added in M20). The web app exchanges its refresh cookie on every full page
+   * load; if the page navigates away mid-request the server rotates but the browser never gets
+   * the new cookie, so the next load innocently replays a consumed token. Before this, pressing
+   * reload at the wrong moment logged you out of every device.
+   */
+  describe('a replay inside the grace window', () => {
+    it('is forgiven, and hands back a usable token instead of revoking the family', async () => {
+      const first = await sessions.issue(userId);
+      const lost = await sessions.rotate(first.refreshToken); // the response the browser missed
+
+      const recovered = await sessions.rotate(first.refreshToken);
+
+      expect(recovered.familyId).toBe(first.familyId);
+      expect(await sessions.isFamilyActive(first.familyId)).toBe(true);
+      // The recovered token works — the whole point is that the caller leaves with something.
+      await expect(sessions.rotate(recovered.refreshToken)).resolves.toMatchObject({
+        familyId: first.familyId,
+      });
+      // And the token whose response was lost is spent, not left as a second live credential.
+      await ageBeyondGrace(first.familyId);
+      await expect(sessions.rotate(lost.refreshToken)).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('records the forgiveness rather than passing silently', async () => {
+      const session = await sessions.issue(userId);
+      await sessions.rotate(session.refreshToken);
+      await sessions.rotate(session.refreshToken);
+
+      const events = await db
+        .select()
+        .from(authEvents)
+        .where(and(eq(authEvents.subjectId, userId), eq(authEvents.type, 'refresh_replay_forgiven')));
+
+      expect(events.length).toBeGreaterThanOrEqual(1);
+      expect(events.at(-1)!.metadata).toMatchObject({ familyId: session.familyId });
+    });
+
+    it('still refuses once the family has nothing live left', async () => {
+      // Inside the window by time, but the family head is gone — there is nothing to rotate
+      // from, and forgiving here would resurrect a dead session.
+      const session = await sessions.issue(userId);
+      await sessions.rotate(session.refreshToken);
+      await sessions.revokeFamily(session.familyId);
+
+      await expect(sessions.rotate(session.refreshToken)).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(await sessions.isFamilyActive(session.familyId)).toBe(false);
+    });
   });
 
   it('rejects an unknown token', async () => {
@@ -157,16 +219,27 @@ describe('SessionService (integration)', () => {
     expect(list[1]).toMatchObject({ id: older.familyId, userAgent: 'browser-a', current: false });
   });
 
-  it('concurrent rotations of the same token do not both succeed', async () => {
-    // Two tabs refreshing at once. The row lock must serialise them: one wins, and the loser
-    // must not be able to also rotate — otherwise a session could fork in two.
+  it('concurrent rotations of the same token do not fork the session', async () => {
+    // Two tabs refreshing at once. The row lock serialises them, and since M20's grace window
+    // both now *return* a token rather than one being refused as theft — that is the whole
+    // point of the window. What must still hold is the invariant this test was written to
+    // protect: the family ends with exactly **one** live credential, so the session cannot fork.
     const session = await sessions.issue(userId);
     const results = await Promise.allSettled([
       sessions.rotate(session.refreshToken),
       sessions.rotate(session.refreshToken),
     ]);
 
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(0);
+
+    const live = await liveTokens(session.familyId);
+    expect(live.filter((t) => t.usedAt === null && t.revokedAt === null)).toHaveLength(1);
+
+    // And only the newest token still works: the loser's is already spent.
+    const issued = results
+      .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof sessions.rotate>>> => r.status === 'fulfilled')
+      .map((r) => r.value.refreshToken);
+    const outcomes = await Promise.allSettled(issued.map((t) => sessions.rotate(t)));
+    expect(outcomes.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
   });
 });

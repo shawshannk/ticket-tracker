@@ -1,5 +1,10 @@
 import { createRootRoute, createRoute, createRouter, Navigate, Outlet } from '@tanstack/react-router';
-import { api } from './api/endpoints';
+import { AcceptInvitePage } from './auth/AcceptInvitePage';
+import { ChangePasswordPage } from './auth/ChangePasswordPage';
+import { LoginPage } from './auth/LoginPage';
+import { RequireAuth } from './auth/RequireAuth';
+import { SessionsPage } from './auth/SessionsPage';
+import { useProjects } from './api/queries';
 import { AppShell } from './layout/AppShell';
 import { BoardPage } from './features/board/BoardPage';
 import { validateBoardSearch } from './features/board/searchParams';
@@ -19,30 +24,90 @@ import { TicketsListPage } from './features/tickets-list/TicketsListPage';
  *
  * Each route is declared explicitly rather than through a factory: TanStack Router infers its
  * type-safe path union from these literals, and a helper function erases them.
+ *
+ * v2 splits the tree in two. `/login` and `/invite/$token` are reachable signed out; everything
+ * else hangs off a pathless layout route rendering `RequireAuth`, so a new route is authenticated
+ * by default — forgetting to guard one is not a thing that can happen by omission.
  */
 
 const rootRoute = createRootRoute({ component: Outlet });
 
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/login',
+  // `next` is the destination the guard bounced away from, echoed back after signing in.
+  // Returned conditionally rather than as `{ next: undefined }`, so the key stays optional and
+  // `navigate({ to: '/login' })` doesn't have to name a search param it has nothing to say about.
+  validateSearch: (search: Record<string, unknown>): { next?: string } =>
+    typeof search.next === 'string' ? { next: search.next } : {},
+  component: LoginPage,
+});
+
+const inviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/invite/$token',
+  component: AcceptInvitePage,
+});
+
+/**
+ * Pathless: contributes a guard and no URL segment. The leading underscore is TanStack's
+ * convention for such a route, and it does surface — every child's *route id* gains an
+ * `/_authed` prefix, which is what `useParams({ from: … })` names. The URLs are unchanged.
+ */
+const authedRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: '_authed',
+  component: RequireAuth,
+});
+
 /** `/` → the first project's overview, so there's no empty landing state. */
 const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => authedRoute,
   path: '/',
-  loader: () => api.projects.list(),
+  // A hook, not a route loader: loaders run before the guard's component renders, so a loader
+  // here would fire an unauthenticated request on every cold load and 401 before bootstrap.
   component: function Index() {
-    const projects = indexRoute.useLoaderData();
-    if (projects.length === 0) {
+    const { data: projects, isPending } = useProjects();
+
+    if (isPending) {
+      return <div className="flex h-screen items-center justify-center bg-slate-100 text-[13px] text-slate-500">Loading…</div>;
+    }
+
+    if (!projects || projects.length === 0) {
       return (
-        <div className="flex h-screen items-center justify-center bg-slate-100 text-[14px] text-slate-500">
-          No projects yet — seed the database with <span className="mx-1 font-mono">pnpm run db:seed</span>.
+        <div className="flex h-screen flex-col items-center justify-center gap-1 bg-slate-100 px-6 text-center text-[14px] text-slate-500">
+          <p className="font-medium text-slate-700">No projects yet</p>
+          <p>You're not a member of any project. Ask an administrator to add you to one.</p>
         </div>
       );
     }
+
     return <Navigate to="/projects/$projectId/overview" params={{ projectId: projects[0].id }} replace />;
   },
 });
 
+const accountPasswordRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/account/password',
+  component: () => (
+    <AppShell title="Change password">
+      <ChangePasswordPage />
+    </AppShell>
+  ),
+});
+
+const accountSessionsRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: '/account/sessions',
+  component: () => (
+    <AppShell title="Active sessions">
+      <SessionsPage />
+    </AppShell>
+  ),
+});
+
 const projectRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => authedRoute,
   path: 'projects/$projectId',
   component: Outlet,
 });
@@ -129,16 +194,22 @@ const userDetailRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  indexRoute,
-  projectRoute.addChildren([
-    overviewRoute,
-    ticketDetailRoute,
-    ticketsRoute,
-    boardRoute,
-    createTicketRoute,
-    peopleRoute,
-    createUserRoute,
-    userDetailRoute,
+  loginRoute,
+  inviteRoute,
+  authedRoute.addChildren([
+    indexRoute,
+    accountPasswordRoute,
+    accountSessionsRoute,
+    projectRoute.addChildren([
+      overviewRoute,
+      ticketDetailRoute,
+      ticketsRoute,
+      boardRoute,
+      createTicketRoute,
+      peopleRoute,
+      createUserRoute,
+      userDetailRoute,
+    ]),
   ]),
 ]);
 

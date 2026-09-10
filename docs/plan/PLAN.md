@@ -296,12 +296,23 @@ first that may ship with the flag off.
   - The project switcher lists only the user's memberships; a user with none sees the explicit empty state.
   - Account menu offers change password, sessions, log out, log out everywhere.
   - No reference to `X-Acting-User-Id` or `ticket-tracker.acting-user` remains in `apps/web`.
+- **Scope adjusted 2026-09-10 during implementation**:
+  - `GET /auth/invite/:token` added to the API (public, throttled): spec 10 §6 wants the
+    acceptance page to name the invitee and nothing could tell it.
+  - The login rate limit became env-configurable, defaulting to the spec's 10 per 15 minutes;
+    Compose raises it because the e2e suite now signs in for real many times per run.
+  - **R16 narrowed**: a refresh replay inside `AUTH_REFRESH_GRACE_MS` on a family that still has
+    a live token is forgiven and audited, instead of revoking the family. Every full page load
+    rotates the cookie, so a navigation that discards the response otherwise ended every session.
+    Agreed with the user; recorded under R16 in specs/10.
+  - E2E ported to real login **here** rather than in M21 (agreed with the user), so the suite
+    stays green; `e2e/auth.spec.ts` covers M20's own criteria and M21 adds the rest.
 - **Depends on**: M19
 
 ### M21: Members UI, invites, hardening & cutover (M)
 - **Goal**: Admin-facing management, the security headers spec 10 §8 promises, and the flag off.
 - **Source spec**: spec 10 §4.1, §4.5, §6; docs/auth-tech-spec.md §7, §9
-- **Files**: `apps/web/src/features/people/*` (invite link display, disable/enable, email visibility by viewer), new `apps/web/src/features/project-settings/Members*.tsx`, `apps/web/nginx.conf` (CSP), `docker-compose.yml` + `.github/workflows/ci.yml` (auth env), `e2e/auth.spec.ts`, `e2e/fixtures.ts` (real login helper), `README.md`.
+- **Files**: `apps/web/src/features/people/*` (invite link display, disable/enable, email visibility by viewer), new `apps/web/src/features/project-settings/Members*.tsx`, `apps/web/nginx.conf` (CSP — note the Dockerfile currently writes its nginx config inline), `docker-compose.yml` + `.github/workflows/ci.yml` (auth env), `e2e/auth.spec.ts` (extend — M20 created it), `README.md`. The real-login helper in `e2e/fixtures.ts` landed in M20.
 - **Acceptance criteria**:
   - An admin creates a user, sees the invite link once, and a second browser accepts it and lands logged in — covered end-to-end.
   - Members table adds/removes/re-roles; refuses removing the last project admin.

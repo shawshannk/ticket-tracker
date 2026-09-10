@@ -2,7 +2,7 @@ import 'dotenv/config';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db';
@@ -230,10 +230,38 @@ describe('auth endpoints (integration)', () => {
     });
 
     // R16 end to end: the replay kills the session, and the victim's token dies with it.
+    /**
+     * The browser's own innocent replay (M20): a page load exchanges the cookie, navigates away
+     * before the response lands, and the next load presents the token that was just consumed.
+     * Forgiven inside the grace window, and the caller leaves with a cookie that works.
+     */
+    it('forgives an immediate replay and returns a usable cookie', async () => {
+      const first = await login(emails.active).expect(200);
+      await request(app.getHttpServer())
+        .post('/auth/refresh').set('Cookie', cookieFrom(first)).expect(200);
+
+      const recovered = await request(app.getHttpServer())
+        .post('/auth/refresh').set('Cookie', cookieFrom(first)).expect(200);
+
+      expect(recovered.body.accessToken).toBeTruthy();
+      await request(app.getHttpServer())
+        .get('/users').set('Authorization', `Bearer ${recovered.body.accessToken}`).expect(200);
+      // And the recovered cookie is itself rotatable — the session continued, it did not end.
+      await request(app.getHttpServer())
+        .post('/auth/refresh').set('Cookie', cookieFrom(recovered)).expect(200);
+    });
+
     it('replaying a consumed cookie revokes the session and clears the cookie', async () => {
       const first = await login(emails.active).expect(200);
       const rotated = await request(app.getHttpServer())
         .post('/auth/refresh').set('Cookie', cookieFrom(first)).expect(200);
+
+      // Aged past the grace window: an immediate replay is the benign lost-response case above.
+      // Theft is a token kept and presented later, which is what R16 is about.
+      await db
+        .update(refreshTokens)
+        .set({ usedAt: new Date(Date.now() - 60_000) })
+        .where(and(eq(refreshTokens.userId, ids.active), isNotNull(refreshTokens.usedAt)));
 
       const replay = await request(app.getHttpServer())
         .post('/auth/refresh').set('Cookie', cookieFrom(first)).expect(401);

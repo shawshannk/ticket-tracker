@@ -1,22 +1,21 @@
 import { Link, useParams } from '@tanstack/react-router';
-import { can, ROLE_COLORS } from '@ticket-tracker/shared';
+import { ROLE_COLORS } from '@ticket-tracker/shared';
 import { useUsers } from '../../api/queries';
 import { ErrorPanel, LoadingPanel } from '../../components/states';
 import { initials } from '../../layout/useDismissable';
-import { useActingUserStore } from '../../store/actingUser';
+import { useCanPlatform } from '../../auth/useCan';
 
 /**
  * Spec 07. Users are global, not project-scoped (spec 00), but the view lives under the
  * project route so the sidebar keeps its context.
  */
 export function PeoplePage() {
-  const { projectId } = useParams({ from: '/projects/$projectId/people' });
+  const { projectId } = useParams({ from: '/_authed/projects/$projectId/people' });
   const { data: users, isPending, error, refetch } = useUsers();
 
-  const actingUserId = useActingUserStore((s) => s.actingUserId);
-  const actingRole = users?.find((u) => u.id === actingUserId)?.role;
   // Spec 07: "Add team member" is Admin-only. Hiding it is UX; the server enforces it (R3).
-  const canManage = can('user.manage', actingRole);
+  // Platform-scoped, so it reads the signed-in person's global role, not a project role.
+  const canManage = useCanPlatform('user.manage');
 
   if (isPending) return <LoadingPanel label="Loading people…" />;
   if (error) return <ErrorPanel error={error} onRetry={() => refetch()} />;

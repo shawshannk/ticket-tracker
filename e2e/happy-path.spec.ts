@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { actAs, cleanup, columnOf, dragCardTo, useProject, waitForBoard, type Seed } from './fixtures';
+import { cleanup, columnOf, dragCardTo, PEOPLE, signIn, useProject, waitForBoard, type Seed } from './fixtures';
 
 /**
  * Spec 09's core happy path, in one flow because each step depends on the last:
@@ -19,8 +19,9 @@ test.describe('ticket lifecycle', () => {
   });
 
   test('a manager can take a ticket from creation to deletion', async ({ page }) => {
+    // A real sign-in, not a dropdown: the app has no way to be someone you didn't authenticate as.
+    await signIn(page, 'manager');
     await page.goto(`/projects/${seed.projectId}/overview`);
-    await actAs(page, 'Aisha Patel'); // manager
 
     await test.step('create a bug', async () => {
       await page.goto(`/projects/${seed.projectId}/create`);
@@ -79,22 +80,28 @@ test.describe('ticket lifecycle', () => {
       await expect(page.locator('main aside select').first()).toHaveValue('Blocked');
     });
 
-    await test.step('comment as the acting user (R6)', async () => {
+    await test.step('comment as the signed-in user (R6)', async () => {
       await page.locator('main textarea').fill('Reproduced — raising priority.');
       await page.locator('main button:has-text("Comment")').click();
       await expect(page.locator('main')).toContainText('Reproduced — raising priority.');
-      // The author is taken server-side from the acting user, never from the page.
-      await expect(page.locator('main')).toContainText('Aisha Patel');
+      // The author is taken server-side from the authenticated user, never from the page.
+      await expect(page.locator('main')).toContainText(PEOPLE.manager.name);
       await expect(page.locator('main')).toContainText('Activity (1)');
     });
 
-    await test.step('a developer cannot delete', async () => {
-      await actAs(page, 'Diego Ramirez');
+    await test.step('a developer cannot delete someone else\'s ticket', async () => {
+      // Spec 10 §3.3 lets a developer delete a ticket *they* reported; the manager reported this
+      // one, so the control stays hidden and the server would refuse it too (M19).
+      const ticketUrl = page.url();
+      await signIn(page, 'developer');
+      await page.goto(ticketUrl);
       await expect(page.locator('main button:has-text("Delete ticket")')).toHaveCount(0);
     });
 
     await test.step('a manager can', async () => {
-      await actAs(page, 'Aisha Patel');
+      const ticketUrl = page.url();
+      await signIn(page, 'manager');
+      await page.goto(ticketUrl);
       page.once('dialog', (d) => d.accept());
       await page.locator('main button:has-text("Delete ticket")').click();
 

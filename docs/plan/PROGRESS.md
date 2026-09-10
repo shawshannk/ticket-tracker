@@ -32,7 +32,7 @@ Phase 2 (M15–M21) derived from `specs/10-authentication-and-authorization.md` 
 | M17 Auth endpoints & AuthGuard | done | specs/10 §4, tech-spec §4.1 (2026-09-09) | 2026-09-09 |
 | M18 Project membership & scope guard | done | specs/10 §3.2, tech-spec §5 (2026-09-09) | 2026-09-10 |
 | M19 Record-level ownership | done | specs/10 §3.3, tech-spec §5.2 (2026-09-09) | 2026-09-10 |
-| M20 Web auth flow | **not started** | specs/10 §6, tech-spec §7 (2026-09-09) | — |
+| M20 Web auth flow | done | specs/10 §6, tech-spec §7 (2026-09-09) | 2026-09-10 |
 | M21 Members UI, invites & cutover | **not started** | specs/10 §4.5, tech-spec §9 (2026-09-09) | — |
 
 ## Handoff log
@@ -1589,3 +1589,107 @@ now complete; M20 and M21 are frontend and cutover.
 
 - **Next**: M20 — web auth flow (L). It is the first module that breaks the old client; the flag
   may not come off in Compose until M21. No blockers.
+
+### M20 — Web auth flow (done, 2026-09-10)
+
+A real login screen, and acting-as deleted from the frontend. The app now authenticates like any
+other client: `AUTH_DEV_IMPERSONATION` is still on in Compose, but nothing in `apps/web` needs it.
+
+- **Files created**: `apps/web/src/auth/` — `tokenStore.ts`, `refresh.ts`, `AuthProvider.tsx`,
+  `RequireAuth.tsx`, `useCan.ts`, `AuthLayout.tsx`, `LoginPage.tsx`, `AcceptInvitePage.tsx`,
+  `SessionsPage.tsx`, `ChangePasswordPage.tsx`; `apps/web/src/layout/AccountMenu.tsx`;
+  `e2e/auth.spec.ts` (4); `apps/api/src/auth/login-rate-limit.ts`.
+- **Files deleted**: `apps/web/src/store/actingUser.ts`, `apps/web/src/layout/ActingUserMenu.tsx`.
+- **Files modified**: `apps/web/src/api/{client,client.spec,endpoints,queries}.ts`;
+  `apps/web/src/{main,router}.tsx`; `apps/web/src/layout/{Sidebar,ProjectSwitcher}.tsx`;
+  `apps/web/src/features/{board/useOptimisticMove,create-ticket/CreateTicketPage,people/*,ticket-detail/{Comments,TicketDetailPage}}`;
+  `e2e/{fixtures,happy-path.spec,rules.spec}.ts`; `apps/api/src/auth/{auth.controller,invite.service,session.service,audit.service}.ts`;
+  `apps/api/src/auth/{auth,session}.int-spec.ts`; `packages/shared/src/types.ts`;
+  `docker-compose.yml`; `apps/api/.env.example`; `specs/10-…md`; `docs/auth-tech-spec.md`.
+
+- **The decision that shaped the module — the guard is a component, not a route `beforeLoad`.**
+  Whether the app may render depends on an *async* answer (the refresh cookie is HttpOnly, so the
+  only way to know whether a session exists is to ask the server), and a synchronous loader guard
+  cannot see that without duplicating the bootstrap. `RequireAuth` hangs off a pathless `_authed`
+  layout route, so every route under it is guarded by construction — a new route cannot be left
+  unguarded by forgetting something. It also gives the three-state `status`, and the `loading`
+  branch is what stops a reload flashing the login page.
+
+- **Decisions and deviations**:
+  1. **`GET /auth/invite/:token` was added to the API.** Spec 10 §6 wants the acceptance page to
+     name the person the invite is for, and no endpoint could say. Public for the same reason
+     `invite/accept` is — the holder has no session — and throttled alongside it. The token *is*
+     the secret, so revealing the address to whoever holds it discloses nothing new.
+  2. **The login rate limit became configurable** (`AUTH_LOGIN_RATE_LIMIT`), defaulting to the
+     spec's 10 per 15 minutes, and Compose raises it. The e2e suite signs in for real several
+     times per run from one host, so two runs inside the window tripped it — and a tripped
+     limiter looks exactly like a broken login page.
+  3. **Every child route id gained an `/_authed` prefix**, which is what `useParams({ from })`
+     names. URLs are unchanged; ten call sites were updated.
+  4. **`main.tsx` no longer retries 401/403/404 queries.** `apiFetch` has already attempted a
+     refresh by the time a 401 surfaces, and retrying a 403 only delays the message.
+  5. **The web app still calls `can()` through `useCan`/`useCanPlatform`**, which resolve the
+     *effective project role* from the memberships login returns — closing M18's noted gap.
+
+- **Three real bugs found during verification, all in code written this session**:
+  1. **`RequireAuth` crashed the tab.** It read the intended URL with `useRouterState`, which
+     subscribes to live router state — so it re-rendered on the navigation it had just triggered
+     and issued another `<Navigate>`, with `next` now pointing at `/login?next=…`, forever. It
+     now reads the location once, on first render, which is also the correct semantics.
+  2. **A dead session looped.** The expiry handler clears the query cache, every mounted query
+     refetches, each 401s and lands back in the handler. `notifySessionExpired` is now one-shot
+     per session, and `refreshSession` short-circuits once a refresh has failed.
+  3. **The dynamic `import('../auth/refresh')` in `client.ts` could load a second copy of the
+     module** under Vite's dev server — with its own `inFlight`, quietly defeating the
+     single-flight guarantee and firing two rotations for one expiry. `refresh.ts` now registers
+     itself on `tokenStore`, so `client.ts` imports one module and there is no cycle to dodge.
+
+- **R16 was narrowed, with the user's agreement, to fix a real defect.** The client holds its
+  access token in memory, so **every full page load rotates the refresh cookie**. If the page
+  navigates away mid-request the server rotates but the browser never receives the `Set-Cookie`,
+  so the next load innocently replays a consumed token — and reuse detection ended every session
+  the person had. Reloading during startup or opening two tabs did it; in the e2e suite it cost
+  about one failure in four runs, and `auth_events` showed the `refresh_reuse` rows to prove it.
+  `SessionService.rotate` now forgives a replay within `AUTH_REFRESH_GRACE_MS` (10s) **when the
+  family still holds a live token**, re-rotating from the family head so the caller leaves with a
+  cookie it actually received, and logging `refresh_replay_forgiven`. A token replayed later, or
+  on a family with nothing live, still revokes everything. Recorded in `specs/10` under R16 and in
+  the tech spec's config table.
+
+- **Verification**:
+  | Check | Result |
+  |---|---|
+  | Web unit | 62 passed (was 56) |
+  | API unit / integration | 151 / 152 passed (integration +4) |
+  | typecheck / build | clean; 5 pre-existing web lint warnings, 0 errors |
+  | **e2e, ported to real login, 5 consecutive full runs** | **9/9 every run** |
+  | `refresh_reuse` events across those 5 runs | **0** (was ~1 per run) |
+  | `refresh_replay_forgiven` events across those 5 runs | 2 — the race still happens, and is now survived |
+  | Unauthenticated deep link → `/login?next=…` → back to that page | e2e |
+  | Reload with a live session never renders `/login` | e2e, asserted on every `framenavigated` |
+  | Ten simultaneous 401s → exactly one refresh | unit |
+  | Expiry reported once however many requests fail after it | unit |
+  | Account menu: change password, sessions, log out, log out everywhere | e2e |
+  | Project switcher with no memberships → explicit empty state | e2e, memberships removed and restored |
+  | `X-Acting-User-Id` / `ticket-tracker.acting-user` anywhere in `apps/web` | none — only a comment saying they are gone |
+
+- **Gotchas for the next session (M21)**:
+  - **A stray `pnpm run dev` on :5173 shadows the Compose web container.** Both bind the port;
+    `localhost` resolves to the dev server's IPv6 loopback first, so container rebuilds appear to
+    do nothing. That cost real time here. `playwright.config.ts` assumes the dev server locally,
+    which is fine — just know which one is answering before concluding a fix did not work.
+  - **The web container is a baked nginx image with no volume mount.** Any `apps/web` change
+    needs `docker compose build web` before it is in the container.
+  - **`AUTH_DEV_IMPERSONATION` is still `true` in Compose**, and nothing in `apps/web` needs it
+    any more. M21 turns it off; that is now a config change, not a code change.
+  - **`e2e/fixtures.ts` clears cookies rather than driving the account menu** to switch people —
+    reading the URL to decide whether to log out races the redirect. M21's own logout test should
+    drive the menu deliberately.
+  - **`AUTH_LOGIN_RATE_LIMIT: 200` in Compose is a development affordance.** CI's auth job must
+    not copy it blindly if it means to exercise the limiter.
+  - **`GET /auth/me` still returns `{user, memberships}`**, not the tech spec's `permissions`
+    field. `useCan` computes from the shared matrices instead, so nothing needs it.
+  - **Comment edit/delete have no UI.** The API landed in M19; the detail view still offers
+    neither, and `Comment.authorId` is there to compare against `useAuth().user.id`.
+
+- **Next**: M21 — members UI, invites, hardening & cutover. No blockers.

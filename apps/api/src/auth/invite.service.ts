@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { and, eq, isNull, lte, sql } from 'drizzle-orm';
 import type { Db, DbExecutor } from '../db';
 import { DB } from '../db/db.module';
-import { invites } from '../db/schema';
+import { invites, users } from '../db/schema';
 import { AuditService } from './audit.service';
 import { TokenService } from './token.service';
 
@@ -85,6 +85,39 @@ export class InviteService {
     };
 
     return executor ? run(executor) : this.db.transaction(run);
+  }
+
+  /**
+   * Read a live invite without consuming it, so the acceptance page can address the person by
+   * the email the link was issued for (spec 10 §6).
+   *
+   * Safe to expose publicly: the token *is* the secret, and anyone holding it is already about
+   * to see the address on the next screen. Invalid, expired and already-accepted tokens raise
+   * the same neutral error `accept()` uses — the page must not become a probe for which links
+   * exist, and a caller who gets past this still has to present the token again to accept.
+   */
+  async preview(token: string): Promise<{ email: string; name: string }> {
+    const tokenHash = this.tokens.hashRefreshToken(token);
+
+    const [row] = await this.db
+      .select({
+        email: users.email,
+        name: users.name,
+        acceptedAt: invites.acceptedAt,
+        expiresAt: invites.expiresAt,
+      })
+      .from(invites)
+      .innerJoin(users, eq(users.id, invites.userId))
+      .where(eq(invites.tokenHash, tokenHash))
+      .limit(1);
+
+    if (!row || row.acceptedAt || row.expiresAt.getTime() <= Date.now()) {
+      throw new UnauthorizedException(
+        'This invite link is no longer valid. Ask an administrator to send you a new one.',
+      );
+    }
+
+    return { email: row.email, name: row.name };
   }
 
   /** Housekeeping for the retention gap noted in the tech spec §10; unused until then. */

@@ -1,6 +1,5 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
 import {
-  can,
   TICKET_ENVS,
   TICKET_PRIORITIES,
   TICKET_SEVERITIES,
@@ -10,11 +9,11 @@ import {
 } from '@ticket-tracker/shared';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useCreateTicket, useSprints, useTickets, useUsers } from '../../api/queries';
-import { useActingUserStore } from '../../store/actingUser';
+import { useCan } from '../../auth/useCan';
 import { buildPayload, emptyForm, validate, type CreateForm } from './buildPayload';
 
 export function CreateTicketPage() {
-  const { projectId } = useParams({ from: '/projects/$projectId/create' });
+  const { projectId } = useParams({ from: '/_authed/projects/$projectId/create' });
   const navigate = useNavigate();
 
   const [form, setForm] = useState<CreateForm>(() => emptyForm());
@@ -33,13 +32,11 @@ export function CreateTicketPage() {
   );
   const stories = form.epicId ? (storyPage?.items ?? []) : [];
 
-  const actingUserId = useActingUserStore((s) => s.actingUserId);
-  const actingRole = users.find((u) => u.id === actingUserId)?.role;
+
   // Spec 06: the Epic option is *hidden* for Developers, not merely disabled. The server
   // re-checks this (M5a) — hiding it is only UX.
-  // Global role again — see TicketDetailPage. The server re-checks against the effective
-  // project role regardless, so a wrong guess here is a cosmetic bug, not a hole.
-  const allowedTypes = TICKET_TYPES.filter((t) => t !== 'epic' || can('ticket.createEpic', actingRole));
+  const canCreateEpic = useCan('ticket.createEpic');
+  const allowedTypes = TICKET_TYPES.filter((t) => t !== 'epic' || canCreateEpic);
 
   const create = useCreateTicket(projectId);
   const set = <K extends keyof CreateForm>(field: K, value: CreateForm[K]) =>

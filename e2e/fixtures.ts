@@ -2,6 +2,21 @@ import { expect, type Page } from '@playwright/test';
 
 export const API = process.env.E2E_API_URL ?? 'http://localhost:3000';
 
+/**
+ * The seed's shared dev password (apps/api/src/db/seed.ts). Every seeded account uses it, so a
+ * spec only has to name the person it wants to be.
+ */
+export const SEED_PASSWORD = 'DevPassw0rd!2026';
+
+/** The seeded people these specs sign in as, by the role each one exercises. */
+export const PEOPLE = {
+  admin: { name: 'Jordan Lee', email: 'jordan.lee@nimbus.io' },
+  manager: { name: 'Aisha Patel', email: 'aisha.patel@nimbus.io' },
+  developer: { name: 'Diego Ramirez', email: 'diego.ramirez@nimbus.io' },
+} as const;
+
+export type Person = keyof typeof PEOPLE;
+
 export interface Seed {
   projectId: string;
   epicId: string;
@@ -10,21 +25,52 @@ export interface Seed {
   developer: string;
 }
 
-async function json<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API}${path}`, init);
-  if (!res.ok) throw new Error(`${init?.method ?? 'GET'} ${path} → ${res.status} ${await res.text()}`);
+/**
+ * M20 turned the API's identity from a header anyone could set into a token you have to earn, so
+ * the fixtures log in for real like any other client. `X-Acting-User-Id` appears nowhere here.
+ */
+const tokens = new Map<string, string>();
+
+export async function tokenFor(person: Person): Promise<string> {
+  const cached = tokens.get(person);
+  if (cached) return cached;
+
+  const res = await fetch(`${API}/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: PEOPLE[person].email, password: SEED_PASSWORD }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `Could not sign in as ${PEOPLE[person].email} (${res.status}). ` +
+        'Run `pnpm --filter @ticket-tracker/api run db:seed` — the seed sets the dev password.',
+    );
+  }
+  const { accessToken } = (await res.json()) as { accessToken: string };
+  tokens.set(person, accessToken);
+  return accessToken;
+}
+
+async function json<T>(path: string, init: RequestInit = {}, person: Person = 'admin'): Promise<T> {
+  // Reads are guarded now too (R11), so every fixture call carries a token — not just writes.
+  const token = await tokenFor(person);
+  const res = await fetch(`${API}${path}`, {
+    ...init,
+    headers: { ...(init.headers ?? {}), authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`${init.method ?? 'GET'} ${path} → ${res.status} ${await res.text()}`);
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
 }
 
-const post = (id: string, body: unknown) => ({
+const post = (body: unknown) => ({
   method: 'POST',
-  headers: { 'content-type': 'application/json', 'X-Acting-User-Id': id },
+  headers: { 'content-type': 'application/json' },
   body: JSON.stringify(body),
 });
 
 async function users() {
-  const all = await json<{ id: string; role: string }[]>('/users');
-  const pick = (role: string) => all.find((u) => u.role === role)!.id;
+  const all = await json<{ id: string; email: string }[]>('/users');
+  const pick = (person: Person) => all.find((u) => u.email === PEOPLE[person].email)!.id;
   return { admin: pick('admin'), manager: pick('manager'), developer: pick('developer') };
 }
 
@@ -41,37 +87,63 @@ export async function useProject(keyPrefix: string): Promise<Seed> {
   if (!project) throw new Error(`Seeded project ${keyPrefix} not found — run pnpm --filter @ticket-tracker/api run db:seed`);
 
   const people = await users();
-  await clearTickets(project.id, people.admin);
+  await clearTickets(project.id);
 
   const epic = await json<{ id: string }>(
     `/projects/${project.id}/tickets`,
-    post(people.admin, { type: 'epic', title: 'E2E parent epic' }),
+    post({ type: 'epic', title: 'E2E parent epic' }),
   );
   return { projectId: project.id, epicId: epic.id, ...people };
 }
 
 /** Leaves the project itself in place; only the rows a spec created are removed. */
-export async function clearTickets(projectId: string, admin: string) {
+export async function clearTickets(projectId: string) {
   const { items } = await json<{ items: { id: string; type: string }[] }>(
     `/projects/${projectId}/tickets?pageSize=100`,
   );
   // Children first — the API refuses to delete a ticket others still link to (M5b).
   for (const t of [...items].sort((a, b) => (a.type === 'epic' ? 1 : -1))) {
-    await fetch(`${API}/tickets/${t.id}`, { method: 'DELETE', headers: { 'X-Acting-User-Id': admin } });
+    await json<void>(`/tickets/${t.id}`, { method: 'DELETE' });
   }
 }
 
-export const cleanup = (seed: Seed) => clearTickets(seed.projectId, seed.admin);
+export const cleanup = (seed: Seed) => clearTickets(seed.projectId);
 
 export function createTicket(seed: Seed, body: Record<string, unknown>) {
-  return json<{ id: string }>(`/projects/${seed.projectId}/tickets`, post(seed.admin, body));
+  return json<{ id: string }>(`/projects/${seed.projectId}/tickets`, post(body));
 }
 
-/** Picks the acting user in the sidebar; every mutation is attributed to them. */
-export async function actAs(page: Page, name: string) {
-  await page.locator('nav button').last().click();
-  await page.locator(`nav button:has-text("${name}")`).last().click();
-  await expect(page.locator('nav').getByText(name)).toBeVisible();
+/** A raw request as a given person, for the specs that bypass the UI to test the API directly. */
+export async function asApi(person: Person, path: string, init: RequestInit = {}) {
+  const token = await tokenFor(person);
+  return fetch(`${API}${path}`, {
+    ...init,
+    headers: { ...(init.headers ?? {}), authorization: `Bearer ${token}` },
+  });
+}
+
+/**
+ * Sign in through the real login form (spec 10 §6). Replaces v1's `actAs`, which picked a name
+ * from a dropdown — there is nothing to pick from any more, which is the point of M20.
+ *
+ * Ends any current session first, so a spec can switch people mid-flow the way it used to.
+ * Clearing cookies rather than driving the account menu is deliberate: `/login` redirects away
+ * as soon as bootstrap finds a live session, so *reading the URL* to decide whether to log out
+ * races that redirect and fails intermittently. The access token needs no clearing — it lives in
+ * a module variable and dies with the page. (Logging out through the UI is M21's own test.)
+ */
+export async function signIn(page: Page, person: Person) {
+  await page.context().clearCookies();
+  await page.goto('/login');
+
+  await page.locator('#email').fill(PEOPLE[person].email);
+  await page.locator('#password').fill(SEED_PASSWORD);
+  await page.locator('button[type="submit"]').click();
+
+  await page.waitForURL((url) => !url.pathname.startsWith('/login'));
+  // Not `nav` — a person with no project memberships lands on an empty state that has no
+  // sidebar at all, and this helper has to work for them too.
+  await expect(page.locator('#email')).toHaveCount(0);
 }
 
 export const boardColumns = (page: Page) => page.locator('main div.rounded-xl.p-3');

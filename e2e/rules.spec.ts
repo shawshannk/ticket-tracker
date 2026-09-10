@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { actAs, API, cleanup, columnOf, createTicket, dragCardTo, useProject, waitForBoard, type Seed } from './fixtures';
+import { asApi, cleanup, columnOf, createTicket, dragCardTo, signIn, useProject, waitForBoard, type Seed } from './fixtures';
 
 /**
  * Spec 09 asks to prioritise **multi-project isolation** and **status-by-type validation** —
@@ -21,6 +21,11 @@ test.describe('server-enforced rules', () => {
   test.afterAll(async () => {
     await cleanup(a);
     await cleanup(b);
+  });
+
+  test.beforeEach(async ({ page }) => {
+    // Every view is behind the auth guard now, so each test starts by signing in.
+    await signIn(page, 'manager');
   });
 
   test('a ticket in project A never appears in project B (R2)', async ({ page }) => {
@@ -58,12 +63,12 @@ test.describe('server-enforced rules', () => {
   });
 
   test('the API rejects an invalid status even when the UI is bypassed (R1)', async () => {
-    const list = await (await fetch(`${API}/projects/${a.projectId}/tickets?type=story`)).json();
+    const list = await (await asApi('admin', `/projects/${a.projectId}/tickets?type=story`)).json();
     const story = list.items[0];
 
-    const res = await fetch(`${API}/tickets/${story.id}/status`, {
+    const res = await asApi('admin', `/tickets/${story.id}/status`, {
       method: 'PATCH',
-      headers: { 'content-type': 'application/json', 'X-Acting-User-Id': a.admin },
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ status: 'Planned' }),
     });
     // The board preventing the drop is UX; this is the actual control.
@@ -72,14 +77,13 @@ test.describe('server-enforced rules', () => {
   });
 
   test('a developer cannot create an epic, in the UI or at the API (R3)', async ({ page }) => {
-    await page.goto(`/projects/${a.projectId}/create`);
-    await actAs(page, 'Diego Ramirez');
+    await signIn(page, 'developer');
     await page.goto(`/projects/${a.projectId}/create`);
     await expect(page.locator('main button').filter({ hasText: /^Epic$/ })).toHaveCount(0);
 
-    const res = await fetch(`${API}/projects/${a.projectId}/tickets`, {
+    const res = await asApi('developer', `/projects/${a.projectId}/tickets`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'X-Acting-User-Id': a.developer },
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ type: 'epic', title: 'Should be refused' }),
     });
     expect(res.status).toBe(403);

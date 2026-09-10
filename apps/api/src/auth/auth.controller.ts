@@ -22,13 +22,16 @@ import {
   type InviteAcceptDto,
   type LoginDto,
   type PasswordChangeDto,
+  type InvitePreview,
   type SessionSummary,
 } from '@ticket-tracker/shared';
 import type { Request, Response } from 'express';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import type { AuthContext } from './auth-context';
 import { AuthService } from './auth.service';
+import { InviteService } from './invite.service';
 import { clearRefreshCookie, REFRESH_COOKIE, setRefreshCookie } from './cookies';
+import { LOGIN_RATE_LIMIT } from './login-rate-limit';
 import { Auth } from './current-user.decorator';
 import { Public } from './public.decorator';
 import { SessionService, type SessionContext } from './session.service';
@@ -44,6 +47,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly sessions: SessionService,
+    private readonly invites: InviteService,
   ) {}
 
   /**
@@ -52,7 +56,7 @@ export class AuthController {
    * (docs/auth-tech-spec.md §6.6).
    */
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 15 * 60 * 1000 } })
+  @Throttle({ default: LOGIN_RATE_LIMIT })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Sign in with email and password' })
@@ -132,7 +136,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 15 * 60 * 1000 } })
+  @Throttle({ default: LOGIN_RATE_LIMIT })
   @Post('invite/accept')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Set a password from an invite link and sign in' })
@@ -144,6 +148,19 @@ export class AuthController {
     const result = await this.auth.acceptInvite(body.token, body.password, contextOf(req));
     setRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
     return { accessToken: result.accessToken, user: result.user, memberships: result.memberships };
+  }
+
+  /**
+   * The invite page needs to say whose invite this is (spec 10 §6). Public for the same reason
+   * `invite/accept` is: the holder of the token has no session yet. Throttled alongside it so
+   * the pair cannot be used to grind tokens.
+   */
+  @Public()
+  @Throttle({ default: LOGIN_RATE_LIMIT })
+  @Get('invite/:token')
+  @ApiOperation({ summary: 'Who an invite link is for, without consuming it' })
+  invitePreview(@Param('token') token: string): Promise<InvitePreview> {
+    return this.invites.preview(token);
   }
 
   @Get('sessions')

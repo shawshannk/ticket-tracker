@@ -228,6 +228,12 @@ export interface ProjectMemberSummary {
   createdAt: string;
 }
 
+/** `GET /auth/invite/:token` — who a live invite link is for, so the page can say so. */
+export interface InvitePreview {
+  email: string;
+  name: string;
+}
+
 /** One active session, for the "where am I signed in" view (spec 10 §4.3). */
 export interface SessionSummary {
   id: string;

@@ -1,26 +1,24 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { can, type UserCreateDto } from '@ticket-tracker/shared';
+import type { UserCreateDto } from '@ticket-tracker/shared';
 import { useMemo, useState } from 'react';
-import { useCreateUser, useUsers } from '../../api/queries';
-import { useActingUserStore } from '../../store/actingUser';
+import { useCreateUser } from '../../api/queries';
+import { useCanPlatform } from '../../auth/useCan';
 import { UserFields } from './UserFields';
 import { emptyUserForm, validate } from './userForm';
 
 /** Spec 07: Admin-only. Submitting navigates to the new user's detail view. */
 export function CreateUserPage() {
-  const { projectId } = useParams({ from: '/projects/$projectId/people/new' });
+  const { projectId } = useParams({ from: '/_authed/projects/$projectId/people/new' });
   const navigate = useNavigate();
   const [form, setForm] = useState(emptyUserForm);
   const [submitted, setSubmitted] = useState(false);
 
-  const { data: users = [] } = useUsers();
-  const actingUserId = useActingUserStore((s) => s.actingUserId);
-  const canManage = can('user.manage', users.find((u) => u.id === actingUserId)?.role);
+  const canManage = useCanPlatform('user.manage');
 
   const create = useCreateUser();
   const errors = useMemo(() => validate(form, 'create'), [form]);
 
-  // Reachable by typing the URL even when the acting user can't use it — the server would
+  // Reachable by typing the URL even when the signed-in person can't use it — the server would
   // reject the POST anyway, but saying so is better than a form that fails on submit.
   if (!canManage) {
     return (

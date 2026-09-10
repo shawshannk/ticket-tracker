@@ -405,6 +405,9 @@ ownership checks without a second lookup. Mechanical change; the compiler finds 
 | `AUTH_ACCESS_TTL` | `15m` | |
 | `AUTH_REFRESH_TTL` | `30d` | |
 | `AUTH_INVITE_TTL` | `7d` | |
+| `AUTH_REFRESH_GRACE_MS` | `10000` | Window in which re-presenting a just-consumed refresh token is forgiven rather than read as theft (R16, narrowed in M20). |
+| `AUTH_LOGIN_RATE_LIMIT` | `10` | Login / invite-accept attempts per window, per ip+email. Raised only in development, where e2e signs in repeatedly. |
+| `AUTH_LOGIN_RATE_TTL_MS` | `900000` | That window. |
 | `AUTH_DEV_IMPERSONATION` | `false` | Honours `X-Acting-User-Id`. Refused when `NODE_ENV=production`. |
 | `WEB_ORIGIN` | — | **Required** now that CORS sends credentials. |
 | `AUTH_COOKIE_DOMAIN` | unset | Set when API and web are on different subdomains. |

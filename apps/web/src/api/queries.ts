@@ -9,7 +9,6 @@ import type {
   TicketListQuery,
   TicketUpdateDto,
 } from '@ticket-tracker/shared';
-import { useActingUserId } from '../store/actingUser';
 import { api } from './endpoints';
 
 /**
@@ -60,23 +59,22 @@ export const useTicket = (id: string) =>
   useQuery({ queryKey: queryKeys.ticket(id), queryFn: () => api.tickets.detail(id), enabled: Boolean(id) });
 
 // --- Mutations ---
-// Each reads the acting user from the store itself, so no call site can forget to pass it.
+// No mutation takes an acting user any more: `client.ts` attaches the bearer token, so identity
+// is not a parameter that a call site could pass wrongly (R11).
 
 export function useCreateUser() {
-  const actingUserId = useActingUserId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: UserCreateDto) => api.users.create(body, actingUserId),
+    mutationFn: (body: UserCreateDto) => api.users.create(body),
     // Users appear as assignees and comment authors across every view, so refresh broadly.
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.users }),
   });
 }
 
 export function useUpdateUser() {
-  const actingUserId = useActingUserId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, body }: { id: string; body: UserUpdateDto }) => api.users.update(id, body, actingUserId),
+    mutationFn: ({ id, body }: { id: string; body: UserUpdateDto }) => api.users.update(id, body),
     onSuccess: (_data, { id }) => {
       qc.invalidateQueries({ queryKey: queryKeys.users });
       qc.invalidateQueries({ queryKey: queryKeys.user(id) });
@@ -88,19 +86,17 @@ export const useUser = (id: string) =>
   useQuery({ queryKey: queryKeys.user(id), queryFn: () => api.users.get(id), enabled: Boolean(id) });
 
 export function useCreateTicket(projectId: string) {
-  const actingUserId = useActingUserId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: TicketCreateDto) => api.tickets.create(projectId, body, actingUserId),
+    mutationFn: (body: TicketCreateDto) => api.tickets.create(projectId, body),
     onSuccess: () => invalidateProject(qc, projectId),
   });
 }
 
 export function useUpdateTicket(projectId?: string) {
-  const actingUserId = useActingUserId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, body }: { id: string; body: TicketUpdateDto }) => api.tickets.update(id, body, actingUserId),
+    mutationFn: ({ id, body }: { id: string; body: TicketUpdateDto }) => api.tickets.update(id, body),
     onSuccess: (_data, { id }) => {
       qc.invalidateQueries({ queryKey: queryKeys.ticket(id) });
       invalidateProject(qc, projectId);
@@ -109,10 +105,9 @@ export function useUpdateTicket(projectId?: string) {
 }
 
 export function useMoveTicketStatus(projectId?: string) {
-  const actingUserId = useActingUserId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, body }: { id: string; body: MoveTicketStatusDto }) => api.tickets.moveStatus(id, body, actingUserId),
+    mutationFn: ({ id, body }: { id: string; body: MoveTicketStatusDto }) => api.tickets.moveStatus(id, body),
     onSuccess: (_data, { id }) => {
       qc.invalidateQueries({ queryKey: queryKeys.ticket(id) });
       invalidateProject(qc, projectId);
@@ -121,19 +116,17 @@ export function useMoveTicketStatus(projectId?: string) {
 }
 
 export function useDeleteTicket(projectId?: string) {
-  const actingUserId = useActingUserId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.tickets.remove(id, actingUserId),
+    mutationFn: (id: string) => api.tickets.remove(id),
     onSuccess: () => invalidateProject(qc, projectId),
   });
 }
 
 export function useAddComment(ticketId: string, projectId?: string) {
-  const actingUserId = useActingUserId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: CommentCreateDto) => api.tickets.addComment(ticketId, body, actingUserId),
+    mutationFn: (body: CommentCreateDto) => api.tickets.addComment(ticketId, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.ticket(ticketId) });
       invalidateProject(qc, projectId);

@@ -1,15 +1,15 @@
 import { useParams } from '@tanstack/react-router';
-import { can, ROLE_COLORS, type User, type UserUpdateDto } from '@ticket-tracker/shared';
+import { ROLE_COLORS, type User, type UserUpdateDto } from '@ticket-tracker/shared';
 import { useEffect, useMemo, useState } from 'react';
-import { useUpdateUser, useUser, useUsers } from '../../api/queries';
+import { useUpdateUser, useUser } from '../../api/queries';
 import { ErrorPanel, LoadingPanel } from '../../components/states';
 import { initials } from '../../layout/useDismissable';
-import { useActingUserStore } from '../../store/actingUser';
+import { useCanPlatform } from '../../auth/useCan';
 import { UserFields } from './UserFields';
 import { changedFields, formFromUser, validate } from './userForm';
 
 export function UserDetailPage() {
-  const { userId } = useParams({ from: '/projects/$projectId/people/$userId' });
+  const { userId } = useParams({ from: '/_authed/projects/$projectId/people/$userId' });
   const { data: user, isPending, error, refetch } = useUser(userId);
 
   if (isPending) return <LoadingPanel label="Loading user…" />;
@@ -22,10 +22,8 @@ function Loaded({ user }: { user: User }) {
   const [submitted, setSubmitted] = useState(false);
   const [savedAt, setSavedAt] = useState(0);
 
-  const { data: users = [] } = useUsers();
-  const actingUserId = useActingUserStore((s) => s.actingUserId);
   // Spec 07: only an Admin may edit. Everyone else sees the read-only summary below.
-  const canManage = can('user.manage', users.find((u) => u.id === actingUserId)?.role);
+  const canManage = useCanPlatform('user.manage');
 
   const update = useUpdateUser();
   const errors = useMemo(() => validate(form, 'update'), [form]);

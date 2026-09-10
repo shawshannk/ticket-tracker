@@ -1,6 +1,6 @@
 import { Link, useParams } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
-import { ActingUserMenu } from './ActingUserMenu';
+import { AccountMenu } from './AccountMenu';
 import { ProjectSwitcher } from './ProjectSwitcher';
 
 const icon = (path: ReactNode) => (
@@ -54,7 +54,7 @@ export function Sidebar() {
       </Link>
 
       <div className="flex-1" />
-      <ActingUserMenu />
+      <AccountMenu />
     </nav>
   );
 }

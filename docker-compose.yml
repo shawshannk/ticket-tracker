@@ -43,6 +43,11 @@ services:
       # v1's X-Acting-User-Id still works here, which is what keeps the web app usable until
       # M20 ships a login screen. Refused at boot if NODE_ENV=production.
       AUTH_DEV_IMPERSONATION: "true"
+      # The spec's limit is 10 logins per 15 minutes per ip+email. The e2e suite signs in for
+      # real several times per run from one host, so two runs inside the window would trip it and
+      # look like a broken login page. Development only — nothing outside Compose sets these, and
+      # the defaults in login-rate-limit.ts are the specified values.
+      AUTH_LOGIN_RATE_LIMIT: "200"
       NODE_ENV: development
     depends_on:
       postgres:

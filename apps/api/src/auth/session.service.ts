@@ -27,6 +27,17 @@ function parseTtlDays(value: string | undefined, fallbackDays: number): number {
   return match ? Number(match[1]) : fallbackDays;
 }
 
+/**
+ * How long after a refresh token is consumed a re-presentation of it is still forgiven, rather
+ * than read as theft (see the long note in `rotate`).
+ *
+ * Ten seconds is chosen to cover a lost `Set-Cookie` — a request the server completed but the
+ * browser abandoned mid-navigation — and nothing longer. A stolen token is not replayed inside
+ * ten seconds of the victim's own use by accident; if it is, the attacker still has to win a
+ * race for a single live token and trips detection on the next round.
+ */
+const REPLAY_GRACE_MS = Number(process.env.AUTH_REFRESH_GRACE_MS ?? 10_000);
+
 @Injectable()
 export class SessionService {
   private readonly refreshTtlDays = parseTtlDays(process.env.AUTH_REFRESH_TTL, 30);
@@ -71,6 +82,35 @@ export class SessionService {
    * audit record that make reuse detection meaningful, leaving a stolen session alive while the
    * response still said 401. So the failure is decided inside and raised after the commit.
    */
+  /**
+   * Consume `current` and issue its successor in the same family. Extracted because rotation now
+   * happens from two places: the ordinary path, and the forgiven-replay path, which rotates from
+   * the family's live head rather than from the token the caller presented.
+   */
+  private async issueSuccessor(
+    tx: Parameters<Parameters<Db['transaction']>[0]>[0],
+    current: { id: string; userId: string; familyId: string },
+    ctx: SessionContext,
+  ): Promise<{ refreshToken: string; expiresAt: Date }> {
+    const { token, tokenHash } = this.tokens.generateRefreshToken();
+    const expiresAt = this.expiry();
+
+    await tx.update(refreshTokens).set({ usedAt: new Date() }).where(eq(refreshTokens.id, current.id));
+
+    // Same family: the rolling window means continuous use never expires, but 30 days of
+    // silence does (spec 10 §4.3).
+    await tx.insert(refreshTokens).values({
+      userId: current.userId,
+      familyId: current.familyId,
+      tokenHash,
+      expiresAt,
+      ip: ctx.ip ?? null,
+      userAgent: ctx.userAgent ?? null,
+    });
+
+    return { refreshToken: token, expiresAt };
+  }
+
   async rotate(
     presentedToken: string,
     ctx: SessionContext = {},
@@ -93,10 +133,61 @@ export class SessionService {
         return { ok: false, reason: 'unknown' };
       }
 
-      // Reuse: this token was already exchanged. Either it was stolen and replayed, or it was
-      // replayed by its rightful owner — we cannot tell, and the safe reading is theft. Revoke
-      // the entire family, so the thief and the victim both have to log in again.
+      // This token was already exchanged. Two very different things look identical here.
+      //
+      // **The benign one, and why it is not rare.** The web app holds its access token in memory
+      // only, so every full page load exchanges the refresh cookie for a new one. If the page
+      // navigates away while that request is in flight, the server has already rotated but the
+      // browser never receives the `Set-Cookie` — so the *next* page load presents the token
+      // that was just consumed, through no fault of anyone. Reloading during startup or opening
+      // two tabs at once does it. Treating that as theft logs the person out of every device for
+      // pressing F5 at the wrong moment.
+      //
+      // **The dangerous one** is a token replayed later, by someone who kept a copy. That is
+      // what R16 is for, and it stays fully covered: only a replay within GRACE_MS of the
+      // token's own use, on a family that still has a live token, is forgiven — and forgiving it
+      // *consumes* that live token, so a thief racing inside the window still ends up fighting
+      // the real client for a single valid token and trips detection on the next round.
       if (row.usedAt) {
+        const withinGrace = Date.now() - row.usedAt.getTime() <= REPLAY_GRACE_MS;
+
+        const [live] = withinGrace
+          ? await tx
+              .select()
+              .from(refreshTokens)
+              .where(
+                and(
+                  eq(refreshTokens.familyId, row.familyId),
+                  isNull(refreshTokens.usedAt),
+                  isNull(refreshTokens.revokedAt),
+                ),
+              )
+              .limit(1)
+              .for('update')
+          : [];
+
+        if (live && live.expiresAt.getTime() > Date.now()) {
+          // Re-rotate from the family's current head, so the caller leaves with a cookie it
+          // actually received. Audited as its own event type — indistinguishable from theft in
+          // the moment, so it must not be invisible afterwards.
+          const replacement = await this.issueSuccessor(tx, live, ctx);
+
+          await this.audit.record(
+            {
+              type: 'refresh_replay_forgiven',
+              subjectId: row.userId,
+              ip: ctx.ip,
+              userAgent: ctx.userAgent,
+              metadata: { familyId: row.familyId, tokenId: row.id, graceMs: REPLAY_GRACE_MS },
+            },
+            tx,
+          );
+
+          return { ok: true, value: { userId: row.userId, familyId: row.familyId, ...replacement } };
+        }
+
+        // Outside the window, or the family has nothing live left: read it as theft and revoke
+        // the entire family, so the thief and the victim both have to log in again.
         await tx
           .update(refreshTokens)
           .set({ revokedAt: new Date() })
@@ -124,25 +215,11 @@ export class SessionService {
         return { ok: false, reason: 'expired' };
       }
 
-      const { token, tokenHash: nextHash } = this.tokens.generateRefreshToken();
-      const expiresAt = this.expiry();
-
-      await tx.update(refreshTokens).set({ usedAt: new Date() }).where(eq(refreshTokens.id, row.id));
-
-      // Same family: the rolling window means continuous use never expires, but 30 days of
-      // silence does (spec 10 §4.3).
-      await tx.insert(refreshTokens).values({
-        userId: row.userId,
-        familyId: row.familyId,
-        tokenHash: nextHash,
-        expiresAt,
-        ip: ctx.ip ?? null,
-        userAgent: ctx.userAgent ?? null,
-      });
+      const issued = await this.issueSuccessor(tx, row, ctx);
 
       return {
         ok: true,
-        value: { userId: row.userId, familyId: row.familyId, refreshToken: token, expiresAt },
+        value: { userId: row.userId, familyId: row.familyId, ...issued },
       };
     });
 

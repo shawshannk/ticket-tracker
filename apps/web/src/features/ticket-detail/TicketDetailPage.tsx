@@ -1,6 +1,5 @@
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import {
-  can,
   ENV_COLORS,
   NEUTRAL_TAG,
   SEVERITY_COLORS,
@@ -16,13 +15,13 @@ import { useDeleteTicket, useSprints, useTicket, useTickets, useUpdateTicket, us
 import { formatDate, relativeTime } from '../../components/relativeTime';
 import { ErrorPanel, LoadingPanel } from '../../components/states';
 import { AppShell } from '../../layout/AppShell';
-import { useActingUserStore } from '../../store/actingUser';
+import { useCan } from '../../auth/useCan';
 import { useViewPrefs } from '../../store/viewPrefs';
 import { Comments } from './Comments';
 import { useTicketDraft } from './useTicketDraft';
 
 export function TicketDetailPage() {
-  const { projectId, ticketId } = useParams({ from: '/projects/$projectId/tickets/$ticketId' });
+  const { projectId, ticketId } = useParams({ from: '/_authed/projects/$projectId/tickets/$ticketId' });
   const { data: ticket, isPending, error, refetch } = useTicket(ticketId);
 
   return (
@@ -66,12 +65,12 @@ function Loaded({ ticket, projectId }: { ticket: TicketDetail; projectId: string
   const { data: sprints = [] } = useSprints(projectId);
   const { data: epicPage } = useTickets(projectId, { type: 'epic', pageSize: 100 });
 
-  const actingUserId = useActingUserStore((s) => s.actingUserId);
-  const actingRole = users.find((u) => u.id === actingUserId)?.role;
+
   // Spec 05: delete is Admin/Manager only. Hiding it is UX — the server enforces it (R3).
-  // The *global* role, not the project one. Correct only because every seeded user holds the
-  // same role in every project; M20's `useCan()` resolves the real effective role (R13).
-  const canDelete = can('ticket.delete', actingRole);
+  // The *effective* project role (R13) — a global manager who is a developer on this project
+  // sees no Delete here, and the server agrees. Hiding it is UX; `assertCanDeleteTicket` is the
+  // enforcement, and it also admits the reporter, whom this check does not (spec 10 §3.3).
+  const canDelete = useCan('ticket.delete');
 
   const [savedAt, setSavedAt] = useState(0);
   useEffect(() => {

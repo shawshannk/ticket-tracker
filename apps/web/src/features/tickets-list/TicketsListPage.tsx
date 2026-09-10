@@ -21,8 +21,8 @@ const columnHelper = createColumnHelper<TicketSummary>();
  * sortable columns are a small change later (the API already accepts sortBy/sortDir).
  */
 export function TicketsListPage() {
-  const { projectId } = useParams({ from: '/projects/$projectId/tickets' });
-  const search = useSearch({ from: '/projects/$projectId/tickets' });
+  const { projectId } = useParams({ from: '/_authed/projects/$projectId/tickets' });
+  const search = useSearch({ from: '/_authed/projects/$projectId/tickets' });
   // The URL omits defaults for a clean, shareable link; the view and the API need them filled.
   const query = useMemo(() => withDefaults(search), [search]);
   const navigate = useNavigate();

@@ -17,7 +17,9 @@ export type AuthEventType =
   | 'role_changed'
   | 'membership_changed'
   | 'user_disabled'
-  | 'refresh_reuse';
+  | 'refresh_reuse'
+  /** A consumed token re-presented inside the grace window — forgiven, but never silent. */
+  | 'refresh_replay_forgiven';
 
 export interface AuthEventInput {
   type: AuthEventType;

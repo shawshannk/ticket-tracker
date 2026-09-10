@@ -23,8 +23,8 @@ import { useOptimisticMove } from './useOptimisticMove';
  * which columns exist is a presentation concern that depends on the Type filter.
  */
 export function BoardPage() {
-  const { projectId } = useParams({ from: '/projects/$projectId/board' });
-  const search = useSearch({ from: '/projects/$projectId/board' });
+  const { projectId } = useParams({ from: '/_authed/projects/$projectId/board' });
+  const search = useSearch({ from: '/_authed/projects/$projectId/board' });
   const query = useMemo(() => withDefaults(search), [search]);
   const navigate = useNavigate();
 

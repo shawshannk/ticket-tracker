@@ -200,6 +200,13 @@ Numbered so tests and later specs can cite them, continuing v1's R-series.
 - **R16 — Refresh-token rotation with reuse detection.** Every refresh consumes its token and
   issues a new one. Presenting an already-consumed token revokes the entire session family and
   logs the event — the standard signal of a stolen token.
+  > **Narrowed 2026-09-10 (M20).** A replay arriving within a short grace window
+  > (`AUTH_REFRESH_GRACE_MS`, default 10s) of the token's own use, on a family that still holds a
+  > live token, is forgiven: the caller is re-issued from the family head and the event is logged
+  > as `refresh_replay_forgiven`. Without this, an ordinary page reload could end every session —
+  > the client exchanges its cookie on each full page load, and a request the server completes
+  > but the browser abandons mid-navigation leaves the browser holding a token it must replay.
+  > A token replayed *later* still revokes the family, which is the threat R16 exists for.
 - **R17 — No password material leaves the server.** Password hashes are never selected into any
   DTO. Login, invite-accept, and password-change bodies are excluded from request logging.
 - **R18 — Last admin standing.** The system always retains at least one active platform admin,

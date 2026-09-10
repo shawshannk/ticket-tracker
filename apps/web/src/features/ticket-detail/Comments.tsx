@@ -2,14 +2,13 @@ import type { CommentWithAuthor } from '@ticket-tracker/shared';
 import { useState } from 'react';
 import { useAddComment } from '../../api/queries';
 import { relativeTime } from '../../components/relativeTime';
+import { useAuth } from '../../auth/AuthProvider';
 import { initials } from '../../layout/useDismissable';
-import { useActingUserStore } from '../../store/actingUser';
-import { useUsers } from '../../api/queries';
 
 /**
- * Activity feed + add box. R6: the author is never sent — the server takes it from the acting
- * user, fixing the prototype's hardcoded "Jordan Lee". The avatar below is only a preview of
- * who the server will record.
+ * Activity feed + add box. R6: the author is never sent — the server takes it from the
+ * authenticated user, fixing the prototype's hardcoded "Jordan Lee". The avatar below is only a
+ * preview of who the server will record, and now it cannot be wrong: it is the signed-in person.
  */
 export function Comments({
   ticketId,
@@ -22,9 +21,7 @@ export function Comments({
 }) {
   const [body, setBody] = useState('');
   const addComment = useAddComment(ticketId, projectId);
-  const actingUserId = useActingUserStore((s) => s.actingUserId);
-  const { data: users = [] } = useUsers();
-  const actingUser = users.find((u) => u.id === actingUserId);
+  const { user } = useAuth();
 
   const submit = () => {
     const text = body.trim();
@@ -55,7 +52,7 @@ export function Comments({
 
       <div className="mt-1.5 flex gap-2.5">
         <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-slate-700 text-[11px] font-bold text-white">
-          {actingUser ? initials(actingUser.name) : '··'}
+          {user ? initials(user.name) : '··'}
         </span>
         <div className="flex-1">
           <textarea

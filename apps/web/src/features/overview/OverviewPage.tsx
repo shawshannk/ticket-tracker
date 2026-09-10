@@ -12,7 +12,7 @@ import { useViewPrefs } from '../../store/viewPrefs';
  * exactly the prototype behaviour the spec set out to replace.
  */
 export function OverviewPage() {
-  const { projectId } = useParams({ from: '/projects/$projectId/overview' });
+  const { projectId } = useParams({ from: '/_authed/projects/$projectId/overview' });
   const { data, isPending, error, refetch } = useOverview(projectId);
 
   if (isPending) return <LoadingPanel label="Loading overview…" />;

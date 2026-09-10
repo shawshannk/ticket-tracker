@@ -2,7 +2,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { BoardQuery, TicketSummary } from '@ticket-tracker/shared';
 import { api } from '../../api/endpoints';
 import { queryKeys } from '../../api/queries';
-import { useActingUserId } from '../../store/actingUser';
 
 /**
  * R9 / spec 04: move the card in the cache the instant it's dropped, then roll back if the
@@ -14,13 +13,12 @@ import { useActingUserId } from '../../store/actingUser';
  * drops — and the card must snap back rather than lie about its status.
  */
 export function useOptimisticMove(projectId: string, query: BoardQuery) {
-  const actingUserId = useActingUserId();
   const qc = useQueryClient();
   const key = queryKeys.board(projectId, query);
 
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
-      api.tickets.moveStatus(id, { status }, actingUserId),
+      api.tickets.moveStatus(id, { status }),
 
     onMutate: async ({ id, status }) => {
       // Stop an in-flight refetch from overwriting the optimistic state mid-drag.
